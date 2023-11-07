@@ -347,7 +347,21 @@ def robot_move(robot):
 
 
 	#####################################################
+	#naive apoach using a finite state machine
+	
+	"""
+	if not bun on table and empty space:
+		move towards bun; grab bun; move to empty table space; place bun
 
+	else if raw burger on table:
+		move to raw burger; grab burger; cook burger
+
+	else if cooked burger in pan and empty table space:
+		move to pan; grab burger; place on table
+
+
+	else: place second bun on table
+	"""
 
 
 
