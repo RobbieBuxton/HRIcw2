@@ -3,6 +3,7 @@ import os
 import threading
 import time
 import random
+import numpy as np
 
 DEBUG = True
 
@@ -34,7 +35,6 @@ window = pygame.display.set_mode(window_size)
 
 # New Helper Functions
 
-
 def merge_images(base_image, top_image):
 	merged_image = base_image.copy()
 	merged_image.blit(top_image.copy(), (0,0))
@@ -42,7 +42,6 @@ def merge_images(base_image, top_image):
 
 def start_cooking_burger(grid_loc):
 	time.sleep(5) 
-	grid_loc.image = images["floor"]
 	grid_loc.image = images["cooked_burger_pan"]
 	grid_loc.piece = "cooked_burger_pan"
 
@@ -57,27 +56,30 @@ class GridBox():
 			self.movable = False
 
 	def update_char(self, character, direction):
-		if character == "person":
-			self.image = merge_images(images["floor"], images["person_front"])
-			self.piece = "person"
-			self.movable = False
-			match direction:
-				case "up":
-					self.image = merge_images(images["floor"], images["person_back"])
-				case "left":
-					self.image = merge_images(images["floor"], images["person_side"])
-				case "down":
-					self.image = merge_images(images["floor"], images["person_front"])
-				case "right":
-					self.image = merge_images(images["floor"],  pygame.transform.flip(images["person_side"].copy(),True,False))
-		if character == "empty":
-			self.image = images["floor"]
-			self.piece = "floor"
-			self.movable = True
-		if character == "robot":
-			self.image = images["robot"]
-			self.piece = "robot"
-			self.movable = False
+		match character:
+			case "person":
+				self.image = merge_images(images["floor"], images["person_front"])
+				self.piece = "person"
+				self.movable = False
+				person_image = images["person_front"]
+				match direction:
+					case "right":
+						person_image = pygame.transform.flip(images["person_side"].copy(),True,False)
+					case "up":
+						person_image = images["person_back"]
+					case "left":
+						person_image = images["person_side"]
+					case "down":
+						person_image = images["person_front"]
+				self.image = merge_images(images["floor"], person_image)
+			case "empty":
+				self.image = images["floor"]
+				self.piece = "floor"
+				self.movable = True
+			case "robot":
+				self.image = images["robot"]
+				self.piece = "robot"
+				self.movable = False
 
 
 	def update(self,piece):
@@ -155,8 +157,7 @@ class Player():
 			if (grid_world.gw[self.pos_x+1][self.pos_y].movable == True): 
 				grid_world.gw[self.pos_x+1][self.pos_y].update_char(self.char,direction)
 				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
-				self.pos_x +=1
-				
+				self.pos_x +=1	
 		if direction == "up":
 			if (grid_world.gw[self.pos_x-1][self.pos_y].movable == True): 
 				grid_world.gw[self.pos_x-1][self.pos_y].update_char(self.char,direction)
@@ -174,7 +175,7 @@ class Player():
 				grid_world.gw[self.pos_x][self.pos_y+1].update_char(self.char,direction)
 				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
 				self.pos_y +=1
-				
+		grid_world.gw[self.pos_x][self.pos_y].update_char(self.char,direction)
 
 	def pickup(self):
 
@@ -361,44 +362,79 @@ class UserModel():
 		self.users_real_actions = []
 		self.users_predicted_actions = [] # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
 
-		self.states = [	'grab_raw_burger','cook_raw_burger','grab_cooked_burger','grab_cheese','grab_bap','combine_bap_burger','combine_bap_cheese','combine_bap_cheese_burger','combine_bap_cheese_burger_bap','deliver_cheeseburger']
-		self.obs = ['up','down','left','right','space']
-		self._intitial_prob_state = {
-				'grab_raw_burger' : 0.1, 
-				'cook_raw_burger' : 0.1,
-				'grab_cooked_burger' : 0.1,
-				'grab_cheese' : 0.1,
-				'grab_bap' : 0.1,
-				'combine_bap_burger' : 0.1,
-				'combine_bap_cheese': 0.1,
-				'combine_bap_cheese_burger' : 0.1,
-				'combine_bap_cheese_burger_bap' : 0.1,
-				'deliver_cheeseburger' : 0.1
-			}
-		#TODO: create transition_matrix	
-		#self.transition_matrix = 
+		self.states = {
+			'grab_raw_burger':0,
+			'cook_raw_burger':1,
+			'grab_cooked_burger':2,
+			'grab_cheese':3,
+			'grab_bap':4,
+			'combine_bap_burger':5,
+			'combine_bap_cheese':6,
+			'combine_bap_cheese_burger':7,
+			'combine_bap_cheese_burger_bap':8,
+			'deliver_cheeseburger':9}
+		
+		self.obs = {
+			'up':0,
+			'down':1,
+			'left':2,
+			'right':3,
+			'space':4}
+		
+		self._init_prob_state = np.zeros((10,1))
+		self._init_prob_state[self.states["grab_raw_burger"]]=0.3
+		self._init_prob_state[self.states["grab_cheese"]]=0.3
+		self._init_prob_state[self.states["grab_bap"]]=0.3
 
-		#TODO: create emission_matrix
-		# you might not want to use a statis emission matrix as it might be dependant on the state of the world
-		# self.emission_probabilities = 
 
+		self._init_transition_probabilities = np.matrix([
+			[1,0,0,0,0,0,0,0,0,0],
+			[0,1,0,0,0,0,0,0,0,0],
+			[0,0,1,0,0,0,0,0,0,0],
+			[0,0,0,1,0,0,0,0,0,0],
+			[0,0,0,0,1,0,0,0,0,0],
+			[0,0,0,0,0,1,0,0,0,0],
+			[0,0,0,0,0,0,1,0,0,0],
+			[0,0,0,0,0,0,0,1,0,0],
+			[0,0,0,0,0,0,0,0,1,0],
+			[0,0,0,0,0,0,0,0,0,1]])
+
+		self._init_emission_probabilities = np.matrix([
+			[1,0,0,0,0,0,0,0,0,0],
+			[0,1,0,0,0,0,0,0,0,0],
+			[0,0,1,0,0,0,0,0,0,0],
+			[0,0,1,0,0,0,0,0,0,0],
+			[0,0,0,1,0,0,0,0,0,0]])
+		
+		self.prob_state = self._init_prob_state
+		self.transition_probabilities = self._init_transition_probabilities
+		self.emission_probabilities = self._init_emission_probabilities
+		
 		#TODO: create other needed variables
 	
 	def create_emission_probabilites(self,user_obs):
 		# TODO: create the emission probabilities given the state of the world
-
-		# emission_probabilities = 
-		# return emission_probabilities
 		pass
 	
 	
 	def update_user_action_probabilities(self,user_obs):
 
 		# TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
-
-
-		# return prob_actions
-		pass
+		# self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
+		print("\n##################")
+		print(self.transition_probabilities)
+		print("times")
+		print(self.prob_state)
+		print("equals")
+		self.prob_state = np.matmul(self.transition_probabilities,self.prob_state)
+		print(self.prob_state)
+		print("times")
+		print(self.emission_probabilities)
+		prob_actions = np.matmul(self.emission_probabilities,self.prob_state)
+		print("equals")
+		print(prob_actions)
+		print(list(prob_actions).index(max(list(prob_actions))))
+		return prob_actions
 
 	def print_accuracy_of_predictions(self):
 		#TODO: at the end of the three minute run:
@@ -422,7 +458,6 @@ grid_world.fill_initial_grid(images)
 
 
 def main():
-
 	#creates the person and the robot players
 	person = Player("person",2,2)
 	robot = Player("robot",2,4)
