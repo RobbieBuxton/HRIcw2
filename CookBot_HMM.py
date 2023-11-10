@@ -4,16 +4,20 @@ import threading
 import time
 import random
 
+DEBUG = True
+
 # Constants for the grid size and image size
 GRID_WIDTH = 7
 GRID_HEIGHT = 7
 IMAGE_WIDTH = 100
 IMAGE_HEIGHT = 100
-GAME_MINUTES = 1
+if DEBUG:
+	GAME_MINUTES = 10000
+else: 
+	GAME_MINUTES = 1
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100,100))
-
 
 # Initialize pygame
 pygame.init()
@@ -26,8 +30,19 @@ window_height = GRID_HEIGHT * IMAGE_HEIGHT
 window_size = (window_width, window_height)
 window = pygame.display.set_mode(window_size)
 
+
+
+# New Helper Functions
+
+
+def merge_images(base_image, top_image):
+	merged_image = base_image.copy()
+	merged_image.blit(top_image.copy(), (0,0))
+	return merged_image
+
 def start_cooking_burger(grid_loc):
 	time.sleep(5) 
+	grid_loc.image = images["floor"]
 	grid_loc.image = images["cooked_burger_pan"]
 	grid_loc.piece = "cooked_burger_pan"
 
@@ -41,11 +56,20 @@ class GridBox():
 		else:
 			self.movable = False
 
-	def update_char(self, character):
+	def update_char(self, character, direction):
 		if character == "person":
-			self.image = images["person"]
+			self.image = merge_images(images["floor"], images["person_front"])
 			self.piece = "person"
 			self.movable = False
+			match direction:
+				case "up":
+					self.image = merge_images(images["floor"], images["person_back"])
+				case "left":
+					self.image = merge_images(images["floor"], images["person_side"])
+				case "down":
+					self.image = merge_images(images["floor"], images["person_front"])
+				case "right":
+					self.image = merge_images(images["floor"],  pygame.transform.flip(images["person_side"].copy(),True,False))
 		if character == "empty":
 			self.image = images["floor"]
 			self.piece = "floor"
@@ -126,32 +150,29 @@ class Player():
 		grid_world.gw[x][y] = GridBox(images[c], c)
 	
 	def move(self, direction):
+		self.direction = direction
 		if direction == "down":
-			self.direction = "down"
 			if (grid_world.gw[self.pos_x+1][self.pos_y].movable == True): 
-				grid_world.gw[self.pos_x+1][self.pos_y].update_char(self.char)
-				grid_world.gw[self.pos_x][self.pos_y].update_char("empty")
+				grid_world.gw[self.pos_x+1][self.pos_y].update_char(self.char,direction)
+				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
 				self.pos_x +=1
 				
 		if direction == "up":
-			self.direction = "up"
 			if (grid_world.gw[self.pos_x-1][self.pos_y].movable == True): 
-				grid_world.gw[self.pos_x-1][self.pos_y].update_char(self.char)
-				grid_world.gw[self.pos_x][self.pos_y].update_char("empty")
+				grid_world.gw[self.pos_x-1][self.pos_y].update_char(self.char,direction)
+				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
 				self.pos_x -=1
 				
 		if direction == "left":
-			self.direction = "left"
 			if (grid_world.gw[self.pos_x][self.pos_y-1].movable == True): 
-				grid_world.gw[self.pos_x][self.pos_y-1].update_char(self.char)
-				grid_world.gw[self.pos_x][self.pos_y].update_char("empty")
+				grid_world.gw[self.pos_x][self.pos_y-1].update_char(self.char,direction)
+				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
 				self.pos_y -=1
 				
 		if direction == "right":
-			self.direction = "right"
 			if (grid_world.gw[self.pos_x][self.pos_y+1].movable == True): 
-				grid_world.gw[self.pos_x][self.pos_y+1].update_char(self.char)
-				grid_world.gw[self.pos_x][self.pos_y].update_char("empty")
+				grid_world.gw[self.pos_x][self.pos_y+1].update_char(self.char,direction)
+				grid_world.gw[self.pos_x][self.pos_y].update_char("empty",direction)
 				self.pos_y +=1
 				
 
