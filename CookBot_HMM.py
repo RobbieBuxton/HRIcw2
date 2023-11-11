@@ -164,8 +164,7 @@ class Gridworld():
 			self.gw[6][2].image = images[piece]
 
 	#A and B are pieces that are not the floor
-	def find_shortest_path(self,a,b):
-		
+	def find_shortest_paths(self,a,b):
 		#Initialise problem
 		search_space = [["#" for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
 		start = (-1,-1)
@@ -180,51 +179,57 @@ class Gridworld():
 					search_space[i][j] = "D"	
 
 
-		path = self.bfs(search_space,start)
-		print(path)
-		obs_path= self.path_to_obs(path)
-		obs_to_print = ""
-		for ob in obs_path:
-			obs_to_print += obs[ob]+", "
-		print(obs_to_print)
-		for row in search_space:
-			print(row)
+		labelled_space, target, pre_target = self.bfs_to_target(search_space,start)
+		sub_paths = self.get_sub_paths(pre_target,labelled_space)
+		return [(path + [target] ) for path in sub_paths]
 	
-	def bfs(self,search_space,start):
-			#Bredth first search
-			# maintain a queue of paths
-			queue = []
-			# push the first path into the queue
-			queue.append([start])
-			while queue:
-				# get the first path from the queue
-				path = queue.pop(0)
-				# get the last node from the path
-				node = path[-1]				
-				# Add surrounding paths to the queue. Assume it's impossible to go out of bounds because floor is never at boundry of map
-				for coord in [(node[0]-1,node[1]),(node[0],node[1]+1),(node[0]+1,node[1]),(node[0],node[1]-1)]:
-					if search_space[coord[0]][coord[1]] == "D":
-						return list(path)+[coord]
-					if search_space[coord[0]][coord[1]] == "O":
-						new_path = list(path)
-						new_path.append(coord)
-						queue.append(new_path)
+	def bfs_to_target(self, search_space, start):
+		labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+		#Bredth first search
+		# maintain a queue of paths
+		queue = []
+		# push the first path into the queue
+		labelled_space[start[0]][start[1]] = 0
+		queue.append([start])
+		target = (-1,-1)
+		while queue:
+			# get the first path from the queue
+			path = queue.pop(0)
+			# get the last node from the path
+			node = path[-1]				
+			# Add surrounding paths to the queue. Assume it's impossible to go out of bounds because floor is never at boundry of map
+			for coord in [(node[0]-1,node[1]),(node[0],node[1]+1),(node[0]+1,node[1]),(node[0],node[1]-1)]:
+				if search_space[coord[0]][coord[1]] == "D":
+					return labelled_space, coord, node
+				if search_space[coord[0]][coord[1]] == "O":
+					if labelled_space[coord[0]][coord[1]] == -1:
+						labelled_space[coord[0]][coord[1]] = labelled_space[node[0]][node[1]]+1
+					else:
+						labelled_space[coord[0]][coord[1]] = min(labelled_space[node[0]][node[1]]+1,labelled_space[coord[0]][coord[1]])
+					new_path = list(path)
+					new_path.append(coord)
+					queue.append(new_path)
 
-	def path_to_obs(self, path):
-		obs = []
+	#Guarentee of no hitting out of bounds
+	def get_sub_paths(self,pos,labelled_space):
+		paths = []
+		to_eval = []
+		current_val = labelled_space[pos[0]][pos[1]]
+		if (current_val == 0):
+			return [[pos]]
+		
+		for adj_pos in [(pos[0]-1,pos[1]),(pos[0],pos[1]+1),(pos[0]+1,pos[1]),(pos[0],pos[1]-1)]:
+			if labelled_space[adj_pos[0]][adj_pos[1]] == current_val - 1: 
+				to_eval.append(adj_pos)
+		
+		results = []
+		for eval_pos in to_eval:
+			results.append(self.get_sub_paths(eval_pos,labelled_space))
+		flat_results = [item for sublist in results for item in sublist]
+		for path in flat_results:
+			path.append(pos)
+		return flat_results
 
-		for i in range(len(path)-1):
-			match (path[i][0]-path[i+1][0],path[i][1]-path[i+1][1]):
-				case (-1,0):
-					obs.append(obs_map["down"])
-				case (0,1):
-					obs.append(obs_map["left"])
-				case (1,0):
-					obs.append(obs_map["up"])
-				case (0,-1):
-					obs.append(obs_map["right"])
-		obs.append(obs_map["space"])
-		return obs
 
 class Player():
 	score = 0
@@ -478,7 +483,9 @@ class UserModel():
 			[0,0,0,0,0,0,0,0,1,0],
 			[0,0,0,0,0,0,0,0,0,1]])
 
-	def update_emission_probabilites(self):
+	def update_emission_probabilites(self,person):
+		probs = self.get_ob_probs_to_piece(person,grid_world,"raw_burger_mount")
+		print(probs)
 		self.emission_probabilities = np.matrix([
 			[1,0,0,0,0,0,0,0,0,0],
 			[0,1,0,0,0,0,0,0,0,0],
@@ -486,7 +493,18 @@ class UserModel():
 			[0,0,1,0,0,0,0,0,0,0],
 			[0,0,0,1,0,0,0,0,0,0]])
 	
-	
+
+
+
+	def get_ob_probs_to_piece(self, person,grid_world,piece):
+		paths = grid_world.find_shortest_paths("person",piece)
+		obs_lists = [self.path_to_obs_list(path,person) for path in paths]
+		obs_head_lists = set([ob_list[0] for ob_list in obs_lists])
+		probs = np.zeros((5))
+		for ob in obs_head_lists:
+			probs[ob] = 1.0/len(obs_head_lists)
+		return probs
+
 	def update_user_action_probabilities(self,user_obs,person,robot,grid_world):
 
 		# TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
@@ -494,14 +512,15 @@ class UserModel():
 		print("\n##################")
 		self.update_transition_probabilities()
 		self.prob_state = np.matmul(self.transition_probabilities,self.prob_state)
-		self.update_emission_probabilites()
+
+		self.update_emission_probabilites(person)
+
 		prob_actions = np.matmul(self.emission_probabilities,self.prob_state)
 
 		print(states[get_largest_idx(self.prob_state)])
 		print(obs[get_largest_idx(prob_actions)])
-		print(str(person.pos_x) + ", " + str(person.pos_y))
-		grid_world.find_shortest_path("person","raw_burger_mount")
-		return prob_actions
+
+		# return prob_actions
 
 	def print_accuracy_of_predictions(self):
 		#TODO: at the end of the three minute run:
@@ -510,6 +529,34 @@ class UserModel():
 		# print the percentage of actions predicted correctly.
 		pass
 
+		#This can probably be merged into BFS but currently useful to be seperate for debugging
+	def path_to_obs_list(self, path, person):
+		obs = []
+		for i in range(len(path)-2):
+			match (path[i][0]-path[i+1][0],path[i][1]-path[i+1][1]):
+				case (-1,0):
+					obs.append(obs_map["down"])
+				case (0,1):
+					obs.append(obs_map["left"])
+				case (1,0):
+					obs.append(obs_map["up"])
+				case (0,-1):
+					obs.append(obs_map["right"])
+		last_dir = ""
+		match (path[-2][0]-path[-1][0],path[-2][1]-path[-1][1]):
+				case (-1,0):
+					last_dir = obs_map["down"]
+				case (0,1):
+					last_dir = obs_map["left"]
+				case (1,0):
+					last_dir = obs_map["up"]
+				case (0,-1):
+					last_dir = obs_map["right"]
+		if last_dir == obs_map[person.direction]:
+			obs.append(obs_map["space"])
+		else :
+			obs.append(last_dir)
+		return obs
 
 	##################################################################
 
