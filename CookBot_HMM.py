@@ -45,6 +45,23 @@ states = [
 	'combine_bap_cheese_burger_bap',
 	'deliver_cheeseburger']
 
+state_targets = [
+	'raw_burger_mount', 
+	### Temporary
+	# 'empty_pan',
+	# 'burger_pan',
+	'none', 
+	'none', 
+	'cheese_mount',
+	'bap_mount',
+	### Temporary
+	'none', 
+	'none', 
+	'none', 
+	'none', 
+	'none'
+]
+
 state_map = {}
 for idx, state in enumerate(states):
 	state_map[state] = idx
@@ -459,13 +476,11 @@ class UserModel():
 		self.users_predicted_actions = [] # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
 		
 		self._init_prob_state = np.zeros((10,1))
-		self._init_prob_state[state_map["grab_raw_burger"]]=0.3
-		self._init_prob_state[state_map["grab_cheese"]]=0.3
-		self._init_prob_state[state_map["grab_bap"]]
+		self._init_prob_state[state_map["grab_raw_burger"]]=0.333
+		self._init_prob_state[state_map["grab_cheese"]]=0.333
+		self._init_prob_state[state_map["grab_bap"]]=0.333
 
 		self.prob_state = self._init_prob_state
-		self.transition_probabilities = np.zeros((10,10))
-		self.emission_probabilities = np.zeros((5,1))
 		
 		#TODO: create other needed variables
 	
@@ -473,31 +488,32 @@ class UserModel():
 	def update_transition_probabilities(self):
 		self.transition_probabilities = np.matrix([
 			[1,0,0,0,0,0,0,0,0,0],
-			[0,1,0,0,0,0,0,0,0,0],
-			[0,0,1,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0],
 			[0,0,0,1,0,0,0,0,0,0],
 			[0,0,0,0,1,0,0,0,0,0],
-			[0,0,0,0,0,1,0,0,0,0],
-			[0,0,0,0,0,0,1,0,0,0],
-			[0,0,0,0,0,0,0,1,0,0],
-			[0,0,0,0,0,0,0,0,1,0],
-			[0,0,0,0,0,0,0,0,0,1]])
+			[0,0,0,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0],
+			[0,0,0,0,0,0,0,0,0,0]],np.float32)
 
 	def update_emission_probabilites(self,person):
-		probs = self.get_ob_probs_to_piece(person,grid_world,"raw_burger_mount")
-		print(probs)
-		self.emission_probabilities = np.matrix([
-			[1,0,0,0,0,0,0,0,0,0],
-			[0,1,0,0,0,0,0,0,0,0],
-			[0,0,1,0,0,0,0,0,0,0],
-			[0,0,1,0,0,0,0,0,0,0],
-			[0,0,0,1,0,0,0,0,0,0]])
-	
+		self.emission_probabilities = np.zeros((5,10))
+		for i in range(10):
+			state = states[i]
+			if state_targets[i] == "none":
+				continue
+			probs = self.get_ob_probs_to_piece(person,grid_world,state)
+			for k in range(5):
+				self.emission_probabilities[k,i] = probs[k]
+
+		print(self.emission_probabilities)
 
 
 
-	def get_ob_probs_to_piece(self, person,grid_world,piece):
-		paths = grid_world.find_shortest_paths("person",piece)
+	def get_ob_probs_to_piece(self, person,grid_world,state):
+		paths = grid_world.find_shortest_paths("person",state_targets[state_map[state]])
 		obs_lists = [self.path_to_obs_list(path,person) for path in paths]
 		obs_head_lists = set([ob_list[0] for ob_list in obs_lists])
 		probs = np.zeros((5))
@@ -517,7 +533,7 @@ class UserModel():
 
 		prob_actions = np.matmul(self.emission_probabilities,self.prob_state)
 
-		print(states[get_largest_idx(self.prob_state)])
+		print(prob_actions)
 		print(obs[get_largest_idx(prob_actions)])
 
 		# return prob_actions
