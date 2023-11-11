@@ -32,6 +32,33 @@ window_size = (window_width, window_height)
 window = pygame.display.set_mode(window_size)
 
 
+#Maps 
+states = [
+	'grab_raw_burger',
+	'cook_raw_burger',
+	'grab_cooked_burger',
+	'grab_cheese',
+	'grab_bap',
+	'combine_bap_burger',
+	'combine_bap_cheese',
+	'combine_bap_cheese_burger',
+	'combine_bap_cheese_burger_bap',
+	'deliver_cheeseburger']
+
+state_map = {}
+for idx, state in enumerate(states):
+	state_map[state] = idx
+
+obs = [
+	'up',
+	'down',
+	'left',
+	'right',
+	'space']
+
+obs_map = {}
+for idx, ob in enumerate(obs):
+	obs_map[ob] = idx
 
 # New Helper Functions
 
@@ -136,7 +163,68 @@ class Gridworld():
 		if char == "robot":
 			self.gw[6][2].image = images[piece]
 
+	#A and B are pieces that are not the floor
+	def find_shortest_path(self,a,b):
 		
+		#Initialise problem
+		search_space = [["#" for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+		start = (-1,-1)
+		for i in range(GRID_HEIGHT):
+			for j in range(GRID_WIDTH):
+				if self.gw[i][j].piece == "floor":
+					search_space[i][j] = "O"
+				if self.gw[i][j].piece == a:
+					search_space[i][j] = "S"
+					start = (i,j)
+				if self.gw[i][j].piece == b:
+					search_space[i][j] = "D"	
+
+
+		path = self.bfs(search_space,start)
+		print(path)
+		obs_path= self.path_to_obs(path)
+		obs_to_print = ""
+		for ob in obs_path:
+			obs_to_print += obs[ob]+", "
+		print(obs_to_print)
+		for row in search_space:
+			print(row)
+	
+	def bfs(self,search_space,start):
+			#Bredth first search
+			# maintain a queue of paths
+			queue = []
+			# push the first path into the queue
+			queue.append([start])
+			while queue:
+				# get the first path from the queue
+				path = queue.pop(0)
+				# get the last node from the path
+				node = path[-1]				
+				# Add surrounding paths to the queue. Assume it's impossible to go out of bounds because floor is never at boundry of map
+				for coord in [(node[0]-1,node[1]),(node[0],node[1]+1),(node[0]+1,node[1]),(node[0],node[1]-1)]:
+					if search_space[coord[0]][coord[1]] == "D":
+						return list(path)+[coord]
+					if search_space[coord[0]][coord[1]] == "O":
+						new_path = list(path)
+						new_path.append(coord)
+						queue.append(new_path)
+
+	def path_to_obs(self, path):
+		obs = []
+
+		for i in range(len(path)-1):
+			match (path[i][0]-path[i+1][0],path[i][1]-path[i+1][1]):
+				case (-1,0):
+					obs.append(obs_map["down"])
+				case (0,1):
+					obs.append(obs_map["left"])
+				case (1,0):
+					obs.append(obs_map["up"])
+				case (0,-1):
+					obs.append(obs_map["right"])
+		obs.append(obs_map["space"])
+		return obs
 
 class Player():
 	score = 0
@@ -356,38 +444,29 @@ def robot_move(robot):
 
 	##################################################################
 
+def get_largest_idx(vector): 
+	return list(vector).index(max(list(vector)))
+
 class UserModel():
 	def __init__(self):
 
 		self.users_real_actions = []
 		self.users_predicted_actions = [] # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
-
-		self.states = {
-			'grab_raw_burger':0,
-			'cook_raw_burger':1,
-			'grab_cooked_burger':2,
-			'grab_cheese':3,
-			'grab_bap':4,
-			'combine_bap_burger':5,
-			'combine_bap_cheese':6,
-			'combine_bap_cheese_burger':7,
-			'combine_bap_cheese_burger_bap':8,
-			'deliver_cheeseburger':9}
-		
-		self.obs = {
-			'up':0,
-			'down':1,
-			'left':2,
-			'right':3,
-			'space':4}
 		
 		self._init_prob_state = np.zeros((10,1))
-		self._init_prob_state[self.states["grab_raw_burger"]]=0.3
-		self._init_prob_state[self.states["grab_cheese"]]=0.3
-		self._init_prob_state[self.states["grab_bap"]]=0.3
+		self._init_prob_state[state_map["grab_raw_burger"]]=0.3
+		self._init_prob_state[state_map["grab_cheese"]]=0.3
+		self._init_prob_state[state_map["grab_bap"]]
 
+		self.prob_state = self._init_prob_state
+		self.transition_probabilities = np.zeros((10,10))
+		self.emission_probabilities = np.zeros((5,1))
+		
+		#TODO: create other needed variables
+	
 
-		self._init_transition_probabilities = np.matrix([
+	def update_transition_probabilities(self):
+		self.transition_probabilities = np.matrix([
 			[1,0,0,0,0,0,0,0,0,0],
 			[0,1,0,0,0,0,0,0,0,0],
 			[0,0,1,0,0,0,0,0,0,0],
@@ -399,41 +478,29 @@ class UserModel():
 			[0,0,0,0,0,0,0,0,1,0],
 			[0,0,0,0,0,0,0,0,0,1]])
 
-		self._init_emission_probabilities = np.matrix([
+	def update_emission_probabilites(self):
+		self.emission_probabilities = np.matrix([
 			[1,0,0,0,0,0,0,0,0,0],
 			[0,1,0,0,0,0,0,0,0,0],
 			[0,0,1,0,0,0,0,0,0,0],
 			[0,0,1,0,0,0,0,0,0,0],
 			[0,0,0,1,0,0,0,0,0,0]])
-		
-		self.prob_state = self._init_prob_state
-		self.transition_probabilities = self._init_transition_probabilities
-		self.emission_probabilities = self._init_emission_probabilities
-		
-		#TODO: create other needed variables
-	
-	def create_emission_probabilites(self,user_obs):
-		# TODO: create the emission probabilities given the state of the world
-		pass
 	
 	
-	def update_user_action_probabilities(self,user_obs):
+	def update_user_action_probabilities(self,user_obs,person,robot,grid_world):
 
 		# TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
 		# self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
 		print("\n##################")
-		print(self.transition_probabilities)
-		print("times")
-		print(self.prob_state)
-		print("equals")
+		self.update_transition_probabilities()
 		self.prob_state = np.matmul(self.transition_probabilities,self.prob_state)
-		print(self.prob_state)
-		print("times")
-		print(self.emission_probabilities)
+		self.update_emission_probabilites()
 		prob_actions = np.matmul(self.emission_probabilities,self.prob_state)
-		print("equals")
-		print(prob_actions)
-		print(list(prob_actions).index(max(list(prob_actions))))
+
+		print(states[get_largest_idx(self.prob_state)])
+		print(obs[get_largest_idx(prob_actions)])
+		print(str(person.pos_x) + ", " + str(person.pos_y))
+		grid_world.find_shortest_path("person","raw_burger_mount")
 		return prob_actions
 
 	def print_accuracy_of_predictions(self):
@@ -494,7 +561,7 @@ def main():
 					user_action = "space"
 					person.space()
 
-				user_model.update_user_action_probabilities(user_action)
+				user_model.update_user_action_probabilities(user_action,person,robot,grid_world)
 
 
 		display_screen(end_time)
