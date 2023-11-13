@@ -125,6 +125,9 @@ class Player():
 		self.direction = "none"
 		self.hand = "empty"
 
+		# I think this should be gw[y],[x] since gw is stored row major
+		# In fact every access into gw should be [y][x] not [x][y]
+		# I could change this everywhere, or I could just make my function ugly
 		grid_world.gw[x][y] = GridBox(images[c], c)
 	
 	def move(self, direction):
@@ -330,39 +333,202 @@ def display_screen(end_time):
 	# Update the display
 	pygame.display.flip()
 
-def robot_move(robot):
-	pass
 
-	#####################################################
-	# TODO: create a robot that helps the user create as many hamburgers as possible
+# Helper functions for robot_move() to make code more readable
+def find_item(item, arr):
+	# returns the index of the first occurance of item in arr, -1 if not found
 
-	#You can use as base any of the algorithms learned in class or create your custom policy
-
-	#you can control the robot using:
-	# robot.move("up")
-	# robot.move("down")
-	# robot.move("right")
-	# robot.move("down")
-	# robot.space()
+	for i in range(len(arr)):
+		if arr[i] == item:
+			return i
+		
+	return -1
 
 
-	#####################################################
-	#naive apoach using a finite state machine
+def both_pans_done(pans):
+	"""
+	returns the index of the first done pan ONLY if both pans are done, -1 otherwise
+	"""
+	done = 0
+	for item in pans:
+		if(item == "cooked_burger"):
+			done += 1
+	if(done == 2):
+		return find_item("cooked_burger", pans)
+	else:
+		return -1
+
+
+def two_table_spaces(table):
+	"""
+	returns the index of the first empty table space ONLY if 2 spaces are empty, -1 otherwise
+	"""
+	free = 0
+	for item in table:
+		if(item == "empty_counter"):
+			free += 1
+	if(free >= 2):
+		return find_item("empty_counter", table)
+	else:
+		return -1
 	
+
+def loc_to_coords(loc, arr):
 	"""
-	if not bun on table and empty space:
-		move towards bun; grab bun; move to empty table space; place bun
+	Given a desired index in the given array, move to this position and direction
+	note: this is not the location of this cell, but where we need to stand
+	      to interact with table[0] which is at (3,3), we chould move to
+		  (3,4) facing left
+	"""
+	if arr == "table":
+		if loc == 0:
+			return (3,4,"left")
+		elif loc == 1:
+			return (2,4,"left")
+		elif loc == 2:
+			return (1,4,"left")
+	elif arr == "pans":
+		if loc == 0:
+			return (3,5,"right")
+		if loc == 1:
+			return (2,5,"right")
+		
 
-	else if raw burger on table:
-		move to raw burger; grab burger; cook burger
+def robot_determine_state(robot):
+	"""
+	based on the grid_world and robot hand determine the robot's desired high level action
+	returns 3-tuple (state, end_pos, start_pos) - end_pos and start_pos may be None
+			go to start_pos, pick up, go to end_pos, put down
+	"""
+	table = [grid_world.gw[3][3].piece, grid_world.gw[2][3].piece, grid_world.gw[1][3].piece]
 
-	else if cooked burger in pan and empty table space:
-		move to pan; grab burger; place on table
+	pans = [ p[:p.rfind('_')] for p in [grid_world.gw[3][6].piece, grid_world.gw[2][6].piece]]
+	 # for convenience we strip the ending "_pan" so that a cooked_burger in the pan or the hand both appear as cooked_burger
+	 # so that looking for "cooked_burger" in hand or "cooked_burger_pan" in pans is the same as "cooked_burger" in pans + hand
+
+	hand = [robot.hand]
+	# lists are defined in this order to give precedance to the table and pan closest to the burger mount,
+	#  since it is preferable for the robot to stay close to this side 
+
+	print("")
+	print(table)
+	print(pans)
+	print(hand)
+	print("")
+
+	if( (t := find_item("bap_burger_cheese", table)) != -1):
+		return ("place_bap",t,None)
+	
+	elif( ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1) ):
+		return ("place_burger",t,p)
+	
+	elif( ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1) ):
+		return ("place_burger",t,p)
+	
+	elif( (t := find_item("cooked_burger", table)) != -1 ):
+		return ("place_bap",t,None)
+	
+	elif( (t := find_item("cheese", table)) != -1 ):
+		return ("place_bap",t,None)
+	
+	elif( (p := both_pans_done(pans) != -1) and (t := find_item("empty_counter", table)) != -1 ):
+		return ("place_burger",t,p)
+	
+	elif( ((t := find_item("raw_burger", table + hand)) != -1) and ((p := find_item("empty", pans)) != -1) ):
+		return ("cook_burger",p,t)
+	
+	elif( (t := two_table_spaces(table)) != -1 ):
+		return ("place_bap",t,None)
+
+	else:
+		return ("idle",None,None)
 
 
-	else: place second bun on table
+def robot_move_to(robot, x, y, dir, press_space=True):
+	"""
+	Moves the robot to position x,y facing in direction dir
+	if press_space set then robot presses space when in desired position
+	Returns True if achieved desired position, False otherwise
 	"""
 
+	print(f"walking to {x},{y},{dir}")
+	print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
+	print("")
+
+	# I hate it here. robot.pos_x stores the robots index into the row major grid world
+	# so x is actually its height in the gw, ie THE Y COORDINATE!
+	# this is why the x check decides up or down and y decides left or right. Very unintuitive
+
+	desired = []
+	if robot.pos_x < x:
+		desired += ["down"]
+	elif robot.pos_x > x:
+		desired += ["up"]
+
+	if robot.pos_y < y:
+		desired += ["right"]
+	elif robot.pos_y > y:
+		desired += ["left"]
+
+
+	if not desired: #if list is empty
+		if robot.direction != dir: # at right space but facing wrong way
+			desired += [dir]
+		
+		else: #at right place and facing right way
+			if press_space:
+				robot.space()
+			return True
+
+	robot.move(desired[0])
+	#robot.move( random.choice(desired) )
+	return False
+
+
+def robot_move(robot):
+	
+	state, end_pos, start_pos = robot_determine_state(robot)
+	# res may also contain end_pos and start_pos, only unpack once we know they exist later
+	# end_pos = res[1]
+	# start_pos = res[2]
+	
+	print(state)
+
+	#sub task based on state
+	if state == "idle":
+		robot_move_to(robot, 3, 4, "left", False) #in idle state go to position close to everything, but dont pick anything up yet
+	
+	elif state == "place_bap":
+		if robot.hand == "empty":
+			robot_move_to(robot, 3, 4, "down") #position of burger_mount
+		elif robot.hand == "bap":
+			x,y,dir = loc_to_coords(end_pos, "table")
+			robot_move_to(robot, x, y, dir)
+		else:
+			print("Uh oh hands full")
+
+	elif state == "place_burger":
+		if robot.hand == "empty":
+			x,y,dir = loc_to_coords(start_pos, "pans")
+			robot_move_to(robot, x, y, dir)
+		elif robot.hand == "cooked_burger":
+			x,y,dir = loc_to_coords(end_pos, "table")
+			robot_move_to(robot, x, y, dir)
+		else:
+			print("Uh oh hands full")
+
+	elif state == "cook_burger":
+		if robot.hand == "empty":
+			x,y,dir = loc_to_coords(start_pos, "table")
+			robot_move_to(robot, x, y, dir)
+		elif robot.hand == "raw_burger":
+			x,y,dir = loc_to_coords(end_pos, "pans")
+			robot_move_to(robot, x, y, dir)
+		else:
+			print("Uh oh hands full")
+
+	else:
+		raise Exception(f"UNKNOWN STATE: {state}")
 
 
 #loads all images from the images directory and inserts them into a dictionary
