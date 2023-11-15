@@ -130,6 +130,7 @@ class Player():
 		self.state = "idle"
 		self.source_pos = None
 		self.target_pos = None
+		self.desired_hand= None
 
 		# I think this should be gw[y],[x] since gw is stored row major
 		# In fact every access into gw should be [y][x] not [x][y]
@@ -377,38 +378,31 @@ def two_table_spaces(table):
 		return find_item("empty_counter", table)
 	else:
 		return -1
-	
-
-def loc_to_coords(loc, arr):
-	"""
-	Given a desired index in the given array, move to this position and direction
-	note: this is not the location of this cell, but where we need to stand
-	      to interact with table[0] which is at (3,3), we chould move to
-		  (3,4) facing left
-	"""
-	if arr == "table":
-		if loc == 0:
-			return (3,4,"left")
-		elif loc == 1:
-			return (2,4,"left")
-		elif loc == 2:
-			return (1,4,"left")
-	elif arr == "pans":
-		if loc == 0:
-			return (3,5,"right")
-		if loc == 1:
-			return (2,5,"right")
 		
+
+def print_state(robot):
+	print(f"State: {robot.state}")
+	print(f"Source_pos: {robot.source_pos}")
+	print(f"Target_pos: {robot.target_pos}")
+	print(f"Desired_hand: {robot.desired_hand}")
+	print(f"Pos_x: {robot.pos_x}")
+	print(f"Pos_y: {robot.pos_y}")
+	print(f"Hand: {robot.hand}")
+	print("")
+
 
 def robot_determine_state(robot):
 	"""
 	based on the grid_world and robot hand determine the robot's desired high level action
-	returns 3-tuple (state, start_pos, end_pos) - start_pos and end_pos may be None
-			go to start_pos, pick up, go to end_pos, put down
+	returns 4-tuple (state, start_pos, end_pos, desired_hand) - start_pos and end_pos may be None
+			go to start_pos, pick up desired_hand, go to end_pos, put down
 	"""
 	table = [grid_world.gw[3][3].piece, grid_world.gw[2][3].piece, grid_world.gw[1][3].piece]
+	table_coords = [(3,4,"left"), (2,4,"left"), (1,4,"left")]
+	#note these are the coords the robot should be to interact with table[i], not the coord of table[i] itself
 
 	pans = [ p[:p.rfind('_')] for p in [grid_world.gw[3][6].piece, grid_world.gw[2][6].piece]]
+	pan_coords = [(3,5,"right"), (2,5,"right")]
 	 # for convenience we strip the ending "_pan" so that a cooked_burger in the pan or the hand both appear as cooked_burger
 	 # so that looking for "cooked_burger" in hand or "cooked_burger_pan" in pans is the same as "cooked_burger" in pans + hand
 
@@ -416,50 +410,62 @@ def robot_determine_state(robot):
 	# lists are defined in this order to give precedance to the table and pan closest to the burger mount,
 	#  since it is preferable for the robot to stay close to this side 
 
+	storage = [grid_world.gw[0][4].piece,grid_world.gw[0][5].piece,grid_world.gw[1][6].piece,grid_world.gw[4][5].piece]
+	storage_coords = [(1,4,"up"),(1,5,"up"),(1,5,"right"),(3,5,"down")]
+	# all aditional work surfaces. Used to dump contents if needed
+
 	print("")
 	print(table)
 	print(pans)
 	print(hand)
 	print("")
 
+	# if we have previously dumped a bap into storage, take that one first, to clear storage
+	if (s := find_item("bap", storage)) != -1:
+		bap_coords = storage_coords[s]
+	else:
+		bap_coords = (3,4,"down")
+
+	
 	#if statements are defined in this order to give precedence to more important actions
 	# in the case that we could transition to multiple states
 
-	if( (t := find_item("bap_burger_cheese", table)) != -1):
-		return ("place_bap",None,t)
+	if (t := find_item("bap_burger_cheese", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
 	
-	elif( ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1) ):
-		return ("place_burger",p,t)
+	elif ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
+		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
 	
-	elif( ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1) ):
-		return ("place_burger",p,t)
+	elif ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
+		return ("place_burger",pan_coords[p], table_coords[t], "cooked_burger")
 	
-	elif( (t := find_item("cooked_burger", table)) != -1 ):
-		return ("place_bap",None,t)
+	elif (t := find_item("cooked_burger", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
 	
-	elif( (t := find_item("cheese", table)) != -1 ):
-		return ("place_bap",None,t)
+	elif (t := find_item("cheese", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
 	
-	elif( (p := both_pans_done(pans) != -1) and (t := find_item("empty_counter", table)) != -1 ):
-		return ("place_burger",p,t)
+	elif (p := both_pans_done(pans) != -1) and (t := find_item("empty_counter", table)) != -1:
+		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
 	
-	elif( ((t := find_item("raw_burger", table + hand)) != -1) and ((p := find_item("empty", pans)) != -1) ):
-		return ("cook_burger",t,p)
+	elif ((t := find_item("raw_burger", table + hand)) != -1) and ((p := find_item("empty", pans)) != -1):
+		return ("cook_burger", table_coords[t], pan_coords[p], "raw_burger")
 	
-	elif( (t := two_table_spaces(table)) != -1 ):
-		return ("place_bap",None,t)
+	elif (t := two_table_spaces(table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
 
 	else:
-		return ("idle",None,None)
+		return ("idle", None, None, None)
 
 
-def robot_move_to(robot, x, y, dir, press_space=True):
+def robot_move_to(robot, pos, press_space=True):
 	"""
 	Moves the robot to position x,y facing in direction dir
 	if press_space set then robot presses space when in desired position
 	Returns True if achieved desired position, False otherwise
 	"""
-
+	print(pos)
+	(x,y,dir) = pos
 	print(f"walking to {x},{y},{dir}")
 	print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
 	print(f"in state: {robot.state}")
@@ -507,50 +513,23 @@ def robot_move(robot):
 	#if we are currently idleing, check if we can do a more important task
 	if(robot.state == "idle"):
 		print("Changing State")
-		robot.state, robot.start_pos, robot.end_pos = robot_determine_state(robot)
+		robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot)
+		print(robot.state, robot.source_pos, robot.target_pos, robot.desired_hand)
 	
 
 	if robot.state == "idle": #if we really are still idle move to a convenient location which is close to most tasks, but dont pick anything up
-		robot_move_to(robot, 3, 4, "left", False)
+		robot_move_to(robot, (3, 4, "left"), False)
 	
-	elif robot.state == "place_bap":
+	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
 		if robot.hand == "empty":
-			robot_move_to(robot, 3, 4, "down") #position of burger_mount
-		elif robot.hand == "bap":
-			x,y,dir = loc_to_coords(robot.end_pos, "table")
-			done = robot_move_to(robot, x, y, dir)
+			robot_move_to(robot, robot.source_pos, True)
+		elif robot.hand == robot.desired_hand:
+			done = robot_move_to(robot, robot.target_pos, True)
 			if done: #got to target pos and pressed space
 				robot.state = "idle"
 		else:
 			print("Uh oh hands full")
 			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
-
-	elif robot.state == "place_burger":
-		if robot.hand == "empty":
-			x,y,dir = loc_to_coords(robot.start_pos, "pans")
-			robot_move_to(robot, x, y, dir)
-		elif robot.hand == "cooked_burger":
-			x,y,dir = loc_to_coords(robot.end_pos, "table")
-			done = robot_move_to(robot, x, y, dir)
-			if done: #got to target pos and pressed space
-				robot.state = "idle"
-		else:
-			print("Uh oh hands full")
-			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
-
-	elif robot.state == "cook_burger":
-		if robot.hand == "empty":
-			x,y,dir = loc_to_coords(robot.start_pos, "table")
-			robot_move_to(robot, x, y, dir)
-		elif robot.hand == "raw_burger":
-			x,y,dir = loc_to_coords(robot.end_pos, "pans")
-			done = robot_move_to(robot, x, y, dir)
-			if done: #got to target pos and pressed space
-				robot.state = "idle"
-		else:
-			print("Uh oh hands full")
-			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
-
 
 	else:
 		raise Exception(f"UNKNOWN STATE: {robot.state}")
