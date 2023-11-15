@@ -464,12 +464,10 @@ def robot_move_to(robot, pos, press_space=True):
 	if press_space set then robot presses space when in desired position
 	Returns True if achieved desired position, False otherwise
 	"""
-	print(pos)
 	(x,y,dir) = pos
 	print(f"walking to {x},{y},{dir}")
 	print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
 	print(f"in state: {robot.state}")
-	print("")
 
 	# I hate it here. robot position accesses gw[x][y], but gw is row major grid
 	#[[o,o,o],
@@ -480,31 +478,33 @@ def robot_move_to(robot, pos, press_space=True):
 	# so x is actually its height in the gw, ie the logical y coordinate
 	# this is why the x check decides up or down and y decides left or right. Very unintuitive
 
-	desired = []
-	if robot.pos_x < x:
-		desired += ["down"]
-	elif robot.pos_x > x:
-		desired += ["up"]
+	pathx = []
+	dx = robot.pos_x - x
+	pathx = abs(dx) * (["down"] if dx < 0 else ["up"])
 
-	if robot.pos_y < y:
-		desired += ["right"]
-	elif robot.pos_y > y:
-		desired += ["left"]
+	pathy = []
+	dy = robot.pos_y - y
+	pathy = abs(dy) * (["right"] if dy < 0 else ["left"])
 
+	if dir in ["up", "down"]:
+		path = pathy + pathx
+	else:
+		path = pathx + pathy
+	# if we want to be facing horizontal then our last movement should be a horizontal one, else vertical
+	#  recall x is actually vertical position so pathx is vertical movements
 
-	if not desired: #if list is empty
-		if robot.direction != dir: # at right space but facing wrong way
-			desired += [dir]
-			# all robot target positions happen to be facing into a wall. So we can walk towards
-			#  the wall which wont let us move but does update our direction
-		
-		else: #at right place and facing right way
+	print(f"path: {path}")
+	print("")
+
+	if not path: #if list is empty
+		if robot.direction != dir: #correct space, wrong direction. This can only happen if we didnt need to move to complete this action
+			path = [dir]
+		else: #at correct position and direction
 			if press_space:
 				robot.space()
 			return True
 
-	robot.move(desired[0])
-	#robot.move( random.choice(desired) )
+	robot.move(path[0])
 	return False
 
 
