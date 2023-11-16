@@ -106,28 +106,26 @@ class Gridworld:
             for j in range(0, GRID_WIDTH):
                 self.gw[i][j] = GridBox(images["floor"], "floor")
 
-        # all the edges are countertops
+        # N,E edges are walls, W edge is counter
         for i in range(0, GRID_HEIGHT - 3):
             self.gw[i][0] = GridBox(images["empty_counter"], "empty_counter")
             self.gw[i][GRID_WIDTH - 1] = GridBox(
-                images["empty_counter"], "empty_counter"
+                images["wall"], "wall"
             )
         for i in range(0, GRID_WIDTH):
-            self.gw[0][i] = GridBox(images["empty_counter"], "empty_counter")
-            self.gw[GRID_HEIGHT - 3][i] = GridBox(
-                images["empty_counter"], "empty_counter"
-            )	
+            self.gw[0][i] = GridBox(images["wall"], "wall")
+
 
         # place things on counter
-        self.gw[0][1] = GridBox(images["raw_burger_mount"], "raw_burger_mount")
-        self.gw[0][4] = GridBox(images["cheese_mount"], "cheese_mount")
-        self.gw[2][6] = GridBox(images["empty_pan"], "empty_pan")
-        self.gw[4][4] = GridBox(images["bap_mount"], "bap_mount")
-        self.gw[4][1] = GridBox(images["empty_pan"], "empty_pan")
-        self.gw[3][2] = GridBox(images["empty_counter"], "empty_counter")
-        self.gw[2][0] = GridBox(images["exit_counter"], "exit_counter")
+        self.gw[1][2] = GridBox(images["empty_pan"], "empty_pan")
+        self.gw[1][4] = GridBox(images["empty_pan"], "empty_pan")
+        self.gw[3][2] = GridBox(images["bap_mount"], "bap_mount")
+        self.gw[3][3] = GridBox(images["cheese_mount"], "cheese_mount")
+        self.gw[3][4] = GridBox(images["empty_counter"], "empty_counter")
+        self.gw[4][0] = GridBox(images["raw_burger_mount"], "raw_burger_mount")
+        self.gw[4][6] = GridBox(images["exit_counter"], "exit_counter")
 
-        # create the emptry two rows at the bottom to display information
+        # create the empty two rows at the bottom to display information
         for i in range(0, GRID_WIDTH):
             self.gw[5][i] = GridBox(black_image, "bottom")
             self.gw[6][i] = GridBox(black_image, "bottom")
@@ -336,6 +334,8 @@ def load_images():
             image = pygame.image.load(image_path)
             im_name = filename[0:-4]
             images[im_name] = image
+
+    images["exit_counter"] = images["exit_counter_flipped"]
     return images
 
 
