@@ -125,6 +125,16 @@ class Player():
 		self.direction = "none"
 		self.hand = "empty"
 
+		#Additionally store a player's internal state. Not used by human player
+		# but can be mainpulated for the robot player
+		self.state = "idle"
+		self.source_pos = None
+		self.target_pos = None
+		self.desired_hand= None
+
+		# I think this should be gw[y],[x] since gw is stored row major
+		# In fact every access into gw should be [y][x] not [x][y]
+		# I could change this everywhere, or I could just make my function ugly
 		grid_world.gw[x][y] = GridBox(images[c], c)
 	
 	def move(self, direction):
@@ -330,39 +340,199 @@ def display_screen(end_time):
 	# Update the display
 	pygame.display.flip()
 
-def robot_move(robot):
-	pass
 
-	#####################################################
-	# TODO: create a robot that helps the user create as many hamburgers as possible
+# Helper functions for robot_move() to make code more readable
+def find_item(item, arr):
+	# returns the index of the first occurance of item in arr, -1 if not found
 
-	#You can use as base any of the algorithms learned in class or create your custom policy
-
-	#you can control the robot using:
-	# robot.move("up")
-	# robot.move("down")
-	# robot.move("right")
-	# robot.move("down")
-	# robot.space()
+	for i in range(len(arr)):
+		if arr[i] == item:
+			return i
+		
+	return -1
 
 
-	#####################################################
-	#naive apoach using a finite state machine
+def both_pans_done(pans):
+	"""
+	returns the index of the first done pan ONLY if both pans are done, -1 otherwise
+	"""
+	done = 0
+	for item in pans:
+		if(item == "cooked_burger"):
+			done += 1
+	if(done == 2):
+		return find_item("cooked_burger", pans)
+	else:
+		return -1
+
+
+def two_table_spaces(table):
+	"""
+	returns the index of the first empty table space ONLY if 2 spaces are empty, -1 otherwise
+	"""
+	free = 0
+	for item in table:
+		if(item == "empty_counter"):
+			free += 1
+	if(free >= 2):
+		return find_item("empty_counter", table)
+	else:
+		return -1
+		
+
+def print_state(robot):
+	print(f"State: {robot.state}")
+	print(f"Source_pos: {robot.source_pos}")
+	print(f"Target_pos: {robot.target_pos}")
+	print(f"Desired_hand: {robot.desired_hand}")
+	print(f"Pos_x: {robot.pos_x}")
+	print(f"Pos_y: {robot.pos_y}")
+	print(f"Hand: {robot.hand}")
+	print("")
+
+
+def robot_determine_state(robot):
+	"""
+	based on the grid_world and robot hand determine the robot's desired high level action
+	returns 4-tuple (state, start_pos, end_pos, desired_hand) - start_pos and end_pos may be None
+			go to start_pos, pick up desired_hand, go to end_pos, put down
+	"""
+	table = [grid_world.gw[3][3].piece, grid_world.gw[2][3].piece, grid_world.gw[1][3].piece]
+	table_coords = [(3,4,"left"), (2,4,"left"), (1,4,"left")]
+	#note these are the coords the robot should be to interact with table[i], not the coord of table[i] itself
+
+	pans = [ p[:p.rfind('_')] for p in [grid_world.gw[3][6].piece, grid_world.gw[2][6].piece]]
+	pan_coords = [(3,5,"right"), (2,5,"right")]
+	 # for convenience we strip the ending "_pan" so that a cooked_burger in the pan or the hand both appear as cooked_burger
+	 # so that looking for "cooked_burger" in hand or "cooked_burger_pan" in pans is the same as "cooked_burger" in pans + hand
+
+	hand = [robot.hand]
+	# lists are defined in this order to give precedance to the table and pan closest to the burger mount,
+	#  since it is preferable for the robot to stay close to this side 
+
+	storage = [grid_world.gw[0][4].piece,grid_world.gw[0][5].piece,grid_world.gw[1][6].piece,grid_world.gw[4][5].piece]
+	storage_coords = [(1,4,"up"),(1,5,"up"),(1,5,"right"),(3,5,"down")]
+	# all aditional work surfaces. Used to dump contents if needed
+
+	print("")
+	print(table)
+	print(pans)
+	print(hand)
+	print("")
+
+	# if we have previously dumped a bap into storage, take that one first, to clear storage
+	if (s := find_item("bap", storage)) != -1:
+		bap_coords = storage_coords[s]
+	else:
+		bap_coords = (3,4,"down")
+
 	
+	#if statements are defined in this order to give precedence to more important actions
+	# in the case that we could transition to multiple states
+
+	if (t := find_item("bap_burger_cheese", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
+	
+	elif ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
+		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
+	
+	elif ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
+		return ("place_burger",pan_coords[p], table_coords[t], "cooked_burger")
+	
+	elif (t := find_item("cooked_burger", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
+	
+	elif (t := find_item("cheese", table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
+	
+	elif (p := both_pans_done(pans) != -1) and (t := find_item("empty_counter", table)) != -1:
+		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
+	
+	elif ((t := find_item("raw_burger", table + hand)) != -1) and ((p := find_item("empty", pans)) != -1):
+		return ("cook_burger", table_coords[t], pan_coords[p], "raw_burger")
+	
+	elif (t := two_table_spaces(table)) != -1:
+		return ("place_bap", bap_coords, table_coords[t], "bap")
+
+	else:
+		return ("idle", None, None, None)
+
+
+def robot_move_to(robot, pos, press_space=True):
 	"""
-	if not bun on table and empty space:
-		move towards bun; grab bun; move to empty table space; place bun
-
-	else if raw burger on table:
-		move to raw burger; grab burger; cook burger
-
-	else if cooked burger in pan and empty table space:
-		move to pan; grab burger; place on table
-
-
-	else: place second bun on table
+	Moves the robot to position x,y facing in direction dir
+	if press_space set then robot presses space when in desired position
+	Returns True if achieved desired position, False otherwise
 	"""
+	(x,y,dir) = pos
+	print(f"walking to {x},{y},{dir}")
+	print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
+	print(f"in state: {robot.state}")
 
+	# I hate it here. robot position accesses gw[x][y], but gw is row major grid
+	#[[o,o,o],
+    # [o,o,o],
+	# [o,*,o]] <- which row we are in stored as robot's x_pos
+	#    ^ which element within this row is stored as robot's y_pos
+
+	# so x is actually its height in the gw, ie the logical y coordinate
+	# this is why the x check decides up or down and y decides left or right. Very unintuitive
+
+	pathx = []
+	dx = robot.pos_x - x
+	pathx = abs(dx) * (["down"] if dx < 0 else ["up"])
+
+	pathy = []
+	dy = robot.pos_y - y
+	pathy = abs(dy) * (["right"] if dy < 0 else ["left"])
+
+	if dir in ["up", "down"]:
+		path = pathy + pathx
+	else:
+		path = pathx + pathy
+	# if we want to be facing horizontal then our last movement should be a horizontal one, else vertical
+	#  recall x is actually vertical position so pathx is vertical movements
+
+	print(f"path: {path}")
+	print("")
+
+	if not path: #if list is empty
+		if robot.direction != dir: #correct space, wrong direction. This can only happen if we didnt need to move to complete this action
+			path = [dir]
+		else: #at correct position and direction
+			if press_space:
+				robot.space()
+			return True
+
+	robot.move(path[0])
+	return False
+
+
+def robot_move(robot):
+	
+	#if we are currently idleing, check if we can do a more important task
+	if(robot.state == "idle"):
+		print("Changing State")
+		robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot)
+		print(robot.state, robot.source_pos, robot.target_pos, robot.desired_hand)
+	
+
+	if robot.state == "idle": #if we really are still idle move to a convenient location which is close to most tasks, but dont pick anything up
+		robot_move_to(robot, (3, 4, "left"), False)
+	
+	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
+		if robot.hand == "empty":
+			robot_move_to(robot, robot.source_pos, True)
+		elif robot.hand == robot.desired_hand:
+			done = robot_move_to(robot, robot.target_pos, True)
+			if done: #got to target pos and pressed space
+				robot.state = "idle"
+		else:
+			print("Uh oh hands full")
+			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
+
+	else:
+		raise Exception(f"UNKNOWN STATE: {robot.state}")
 
 
 #loads all images from the images directory and inserts them into a dictionary
