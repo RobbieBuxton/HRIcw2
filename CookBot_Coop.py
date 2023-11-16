@@ -503,9 +503,13 @@ def robot_move_to(robot, pos, press_space=True):
 			if press_space:
 				robot.space()
 			return True
+	print("PATH")
+	print(path)
 
 	robot.move(path[0])
 	return False
+
+
 
 
 def robot_move(robot):

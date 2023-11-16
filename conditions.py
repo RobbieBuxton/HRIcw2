@@ -1,3 +1,4 @@
+from turtle import right
 import pygame
 import os
 import threading
@@ -114,11 +115,12 @@ class Gridworld:
             )
         for i in range(0, GRID_WIDTH):
             self.gw[0][i] = GridBox(images["wall"], "wall")
-
+        
 
         # place things on counter
         self.gw[1][2] = GridBox(images["empty_pan"], "empty_pan")
         self.gw[1][4] = GridBox(images["empty_pan"], "empty_pan")
+        self.gw[0][5] = GridBox(images["floor"], "idle_state")
         self.gw[3][2] = GridBox(images["bap_mount"], "bap_mount")
         self.gw[3][3] = GridBox(images["cheese_mount"], "cheese_mount")
         self.gw[3][4] = GridBox(images["empty_counter"], "empty_counter")
@@ -130,12 +132,104 @@ class Gridworld:
             self.gw[5][i] = GridBox(black_image, "bottom")
             self.gw[6][i] = GridBox(black_image, "bottom")
 
+        grid_world.gw[0][5].movable = True # Idle State
+
+
     # update what the screen shows is in the hands of the player
     def update_hand(self, piece, char):
         if char == "person":
             self.gw[6][0].image = images[piece]
         if char == "robot":
             self.gw[6][2].image = images[piece]
+
+
+    def find_shortest_paths(self, a, b):
+        # print("Print_a")
+        # print(a)
+        # print("Print_b")
+        # print(b)
+        # print("Print_done")
+        def bfs_to_target(search_space, start):
+            labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+            # Bredth first search
+            # maintain a queue of paths
+            queue = []
+            # push the first path into the queue
+            labelled_space[start[0]][start[1]] = 0
+            queue.append([start])
+            target = (-1, -1)
+            while queue:
+                # get the first path from the queue
+                path = queue.pop(0)
+                # get the last node from the path
+                node = path[-1]
+                # Add surrounding paths to the queue. Assume it's impossible to go out of bounds because floor is never at boundry of map
+                for coord in [
+                    (node[0] - 1, node[1]),
+                    (node[0], node[1] + 1),
+                    (node[0] + 1, node[1]),
+                    (node[0], node[1] - 1),
+                ]:
+                    if search_space[coord[0]][coord[1]] == "D":
+                        return labelled_space, coord, node
+                    if search_space[coord[0]][coord[1]] == "O":
+                        if labelled_space[coord[0]][coord[1]] == -1:
+                            labelled_space[coord[0]][coord[1]] = (
+                                labelled_space[node[0]][node[1]] + 1
+                            )
+                        else:
+                            labelled_space[coord[0]][coord[1]] = min(
+                                labelled_space[node[0]][node[1]] + 1,
+                                labelled_space[coord[0]][coord[1]],
+                            )
+                        new_path = list(path)
+                        new_path.append(coord)
+                        queue.append(new_path)
+
+        # Guarentee of no hitting out of bounds
+        def get_sub_paths(pos, labelled_space):
+            paths = []
+            to_eval = []
+            current_val = labelled_space[pos[0]][pos[1]]
+            if current_val == 0:
+                return [[pos]]
+
+            for adj_pos in [
+                (pos[0] - 1, pos[1]),
+                (pos[0], pos[1] + 1),
+                (pos[0] + 1, pos[1]),
+                (pos[0], pos[1] - 1),
+            ]:
+                if labelled_space[adj_pos[0]][adj_pos[1]] == current_val - 1:
+                    to_eval.append(adj_pos)
+
+            results = []
+            for eval_pos in to_eval:
+                results.append(get_sub_paths(eval_pos, labelled_space))
+            flat_results = [item for sublist in results for item in sublist]
+            for path in flat_results:
+                path.append(pos)
+            return flat_results
+            
+        # Initialise problem
+        search_space = [["#" for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
+        start = (-1, -1)
+        for i in range(GRID_HEIGHT):
+            for j in range(GRID_WIDTH):
+                if self.gw[i][j].piece == "floor":
+                    search_space[i][j] = "O"
+                if self.gw[i][j].piece == a:
+                    search_space[i][j] = "S"
+                    start = (i, j)
+                if self.gw[i][j].piece == b:
+                    search_space[i][j] = "D"
+
+        labelled_space, target, pre_target = bfs_to_target(search_space, start)
+        sub_paths = get_sub_paths(pre_target, labelled_space)
+        # print('output')
+        # print([(path + [target]) for path in sub_paths])
+        # print('end_output')
+        return [(path + [target]) for path in sub_paths]
 
 class Player:
     score = 0
@@ -430,25 +524,122 @@ def main():
 
     # Quit pygame
     pygame.quit()
+    
+def find_item(item, arr):
+	# returns the index of the first occurance of item in arr, -1 if not found
 
+	for i in range(len(arr)):
+		if arr[i] == item:
+			return i
+		
+	return -1
 
 def robot_move(robot):
 	
 	#if we are currently idleing, check if we can do a more important task
 	if(robot.state == "idle"):
-		print("Changing State")
 		robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot)
-		print(robot.state, robot.source_pos, robot.target_pos, robot.desired_hand)
-# def robot_move(robot):
-#     pass
+
+	if(robot.state == "idle"):
+		robot_move_to(robot, "idle_state", False)
+	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
+		if robot.hand == "empty":
+			robot_move_to(robot, robot.source_pos, True)
+		elif robot.hand == robot.desired_hand:
+			done = robot_move_to(robot, robot.target_pos, True)
+			if done: #got to target pos and pressed space
+				robot.state = "idle"
+		else:
+			print("Uh oh hands full")
+			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
+
+	else:
+		raise Exception(f"UNKNOWN STATE: {robot.state}")
+
 
 def robot_determine_state(robot):
+
+    # raw_burger_coords = (4, 1, 'left')
+
     hand = [robot.hand]
-    return 1, 2, 3, 4
+    pans = [ p[:p.rfind('_')] for p in [grid_world.gw[1][2].piece, grid_world.gw[1][4].piece]]
+    # pan_coords = [(1,1,"right"), (2,2,"up"), (1, 3, "left"), (1, 3, "right"), (2, 4, "up"), (1, 5, 'left')]
+    storage = [grid_world.gw[1][0].piece, grid_world.gw[2][0].piece, grid_world.gw[3][0].piece, grid_world.gw[3][4].piece]
+    # storage_coords = [(1, 1, 'left'), (2, 1, 'left'), (3, 1, 'left'), (2, 4, 'down'), (3, 5, 'left'), (4, 4, 'up')]
 
-def robot_move_to(robot):
-    pass
+    if ((find_item('empty', pans)) != -1) and ((find_item('empty', hand)) != -1):
+        return ("cook_burger", "raw_burger_mount", "empty_pan", 'raw_burger')
+    else:
+        return ("idle", None, None, None)
 
+        
+
+
+def robot_move_to(robot, dest, press_space=True):
+    # print(dest)
+	# (x,y,dir) = pos
+	# print(f"walking to {x},{y},{dir}")
+	# print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
+	# print(f"in state: {robot.state}")
+    path = grid_world.find_shortest_paths("robot", dest)[0]
+    path = path[1:] if path[-1] == (0, 5) else path[1:-1]
+    print(path)
+
+    if not path:
+        dir = find_direction(robot, dest)
+        move = find_move(robot, dir)
+        
+        if robot.direction != dir:
+            path = [move]
+        else:
+            if press_space:
+                robot.space()
+            return True
+        
+
+    follow_directions(robot, robot.pos_x, robot.pos_y, path[0][0], path[0][1])
+
+    return False
+
+def follow_directions(robot, curr_x, curr_y, next_x, next_y):
+    direction = ""
+    print(curr_x, curr_y, next_x, next_y)
+    if next_x == curr_x:
+        direction = "left" if (next_y < curr_y) else "right"
+    else:
+        direction = "down" if (next_x > curr_x) else "up"
+    robot.move(direction)
+
+    return 
+
+def find_direction(robot, dest):
+    x, y = robot.pos_x, robot.pos_y
+    if (x, y) == (4, 1) or (x, y) == (1, 5) or (x, y) == (3, 5):
+        return "left"
+    elif (x, y) == (4, 2) or (x, y) == (4, 3):
+        return "up"
+    elif (x, y) == (1, 1) or (x, y) == (3, 1) or (x, y) == (2, 5): # (1, 5) 
+        return "right"
+    elif (x, y) == (2, 3):
+        return "down"
+    else:
+        if (x, y) == (2, 2):
+            if dest == "bap_mount":
+                return "down"
+            else:
+                return "up"
+        # other conditions to check if at (2, 4) -> up or down or if at (1, 3) -> left or right
+
+def find_move(robot, dir):
+    print(dir)
+    if dir  == "right":
+        return (robot.pos_x, robot.pos_y + 1)
+    elif dir == "left":
+        return (robot.pos_x, robot.pos_y - 1)
+    elif dir == "up":
+        return (robot.pos_x + 1, robot.pos_y)
+    else:
+        return (robot.pos_x - 1, robot.pos_y)
 
 if __name__ == "__main__":
     main()
