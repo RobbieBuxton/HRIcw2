@@ -15,6 +15,7 @@
 
       packages = with nixpkgs.legacyPackages.${system}; [ 
         python311Packages.pygame
+        python311Packages.numpy
       ];
 
       shellHook = ''
