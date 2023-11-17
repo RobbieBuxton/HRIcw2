@@ -133,6 +133,7 @@ class Gridworld:
             self.gw[6][i] = GridBox(black_image, "bottom")
 
         grid_world.gw[0][5].movable = True # Idle State
+        grid_world.gw[1][3] = GridBox(images["wall"], "wall")
 
 
     # update what the screen shows is in the hands of the player
@@ -541,7 +542,7 @@ def robot_move(robot):
 		robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot)
 
 	if(robot.state == "idle"):
-		robot_move_to(robot, "idle_state", False)
+		print('') if robot.pos_x == 0 and robot.pos_y == 5 else robot_move_to(robot, "idle_state", False)
 	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
 		if robot.hand == "empty":
 			robot_move_to(robot, robot.source_pos, True)
@@ -569,6 +570,8 @@ def robot_determine_state(robot):
 
     if ((find_item('empty', pans)) != -1) and ((find_item('empty', hand)) != -1):
         return ("cook_burger", "raw_burger_mount", "empty_pan", 'raw_burger')
+    elif ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
+        return ("place_burger", "cooked_burger_pan", "bap", "cooked_burger")
     else:
         return ("idle", None, None, None)
 
@@ -581,14 +584,16 @@ def robot_move_to(robot, dest, press_space=True):
 	# print(f"walking to {x},{y},{dir}")
 	# print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
 	# print(f"in state: {robot.state}")
+
     path = grid_world.find_shortest_paths("robot", dest)[0]
     path = path[1:] if path[-1] == (0, 5) else path[1:-1]
+
     print(path)
 
     if not path:
         dir = find_direction(robot, dest)
         move = find_move(robot, dir)
-        
+
         if robot.direction != dir:
             path = [move]
         else:
@@ -603,7 +608,6 @@ def robot_move_to(robot, dest, press_space=True):
 
 def follow_directions(robot, curr_x, curr_y, next_x, next_y):
     direction = ""
-    print(curr_x, curr_y, next_x, next_y)
     if next_x == curr_x:
         direction = "left" if (next_y < curr_y) else "right"
     else:
@@ -616,7 +620,7 @@ def find_direction(robot, dest):
     x, y = robot.pos_x, robot.pos_y
     if (x, y) == (4, 1) or (x, y) == (1, 5) or (x, y) == (3, 5):
         return "left"
-    elif (x, y) == (4, 2) or (x, y) == (4, 3):
+    elif (x, y) == (4, 2) or (x, y) == (4, 3) or (x, y) == (4, 4):
         return "up"
     elif (x, y) == (1, 1) or (x, y) == (3, 1) or (x, y) == (2, 5): # (1, 5) 
         return "right"
@@ -628,18 +632,19 @@ def find_direction(robot, dest):
                 return "down"
             else:
                 return "up"
+
+
         # other conditions to check if at (2, 4) -> up or down or if at (1, 3) -> left or right
 
 def find_move(robot, dir):
-    print(dir)
     if dir  == "right":
         return (robot.pos_x, robot.pos_y + 1)
     elif dir == "left":
         return (robot.pos_x, robot.pos_y - 1)
     elif dir == "up":
-        return (robot.pos_x + 1, robot.pos_y)
-    else:
         return (robot.pos_x - 1, robot.pos_y)
+    else:
+        return (robot.pos_x + 1, robot.pos_y)
 
 if __name__ == "__main__":
     main()
