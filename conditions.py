@@ -543,7 +543,7 @@ def robot_move(robot):
 
 	if(robot.state == "idle"):
 		print('') if robot.pos_x == 0 and robot.pos_y == 5 else robot_move_to(robot, "idle_state", False)
-	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
+	elif robot.state in ["place_bap", "place_burger", "cook_burger", "place_cheese"]:
 		if robot.hand == "empty":
 			robot_move_to(robot, robot.source_pos, True)
 		elif robot.hand == robot.desired_hand:
@@ -574,6 +574,8 @@ def robot_determine_state(robot):
         return ("place_burger", "cooked_burger_pan", "bap", "cooked_burger")
     elif  ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap_cheese', storage)) != -1):
         return ("place_burger", "cooked_burger_pan", "bap_cheese", "cooked_burger")
+    elif  ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap_burger', storage)) != -1):
+        return ("place_cheese", "cheese_mount", "bap_burger", "cheese")
     elif ((find_item('empty', hand)) != -1) and ((find_item('bap_burger_cheese', storage)) != -1):
         return ("place_bap", "bap_mount", "bap_burger_cheese", "bap")
     elif ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
@@ -590,7 +592,8 @@ def robot_move_to(robot, dest, press_space=True):
 	# print(f"walking to {x},{y},{dir}")
 	# print(f"currently at {robot.pos_x},{robot.pos_y},{robot.direction}")
 	# print(f"in state: {robot.state}")
-
+    print("dest")
+    print(dest)
     path = grid_world.find_shortest_paths("robot", dest)[0]
     path = path[1:] if path[-1] == (0, 5) else path[1:-1]
 
