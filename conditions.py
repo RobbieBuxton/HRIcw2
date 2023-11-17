@@ -572,6 +572,12 @@ def robot_determine_state(robot):
         return ("cook_burger", "raw_burger_mount", "empty_pan", 'raw_burger')
     elif ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
         return ("place_burger", "cooked_burger_pan", "bap", "cooked_burger")
+    elif  ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap_cheese', storage)) != -1):
+        return ("place_burger", "cooked_burger_pan", "bap_cheese", "cooked_burger")
+    elif ((find_item('empty', hand)) != -1) and ((find_item('bap_burger_cheese', storage)) != -1):
+        return ("place_bap", "bap_mount", "bap_burger_cheese", "bap")
+    elif ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
+        return ("place_cheese", "cheese_mount", "bap", "cheese")
     else:
         return ("idle", None, None, None)
 
@@ -618,20 +624,62 @@ def follow_directions(robot, curr_x, curr_y, next_x, next_y):
 
 def find_direction(robot, dest):
     x, y = robot.pos_x, robot.pos_y
-    if (x, y) == (4, 1) or (x, y) == (1, 5) or (x, y) == (3, 5):
+
+    print(dest)
+    
+    if (x, y) == (1, 1):
+        if dest == "empty_pan" or dest == "cooked_burger_pan":
+            return "right"
         return "left"
-    elif (x, y) == (4, 2) or (x, y) == (4, 3) or (x, y) == (4, 4):
+    elif (x, y) == (2, 1):
+        return "left"
+    elif (x, y) == (3, 1):
+        if dest == "bap_mount":
+            return "right"
+        return "left"
+    elif (x, y) == (4, 1):
+        return "left"
+    elif (x, y) == (2, 2):
+        if dest == "bap_mount":
+            return "down"
         return "up"
-    elif (x, y) == (1, 1) or (x, y) == (3, 1) or (x, y) == (2, 5): # (1, 5) 
-        return "right"
+    elif (x, y) == (4, 2):
+        return "up"
     elif (x, y) == (2, 3):
         return "down"
+    elif (x, y) == (4, 3):
+        return "up"
+    elif (x, y) == (2, 4):
+        if dest == "empty_pan" or dest == "cooked_burger_pan":
+            return "up"
+        return "down"
+    elif (x, y) == (4, 4):
+        return "up"
+    elif (x, y) == (1, 5):
+        return "left"
+    elif (x, y) == (3, 5):
+        return "left"
     else:
-        if (x, y) == (2, 2):
-            if dest == "bap_mount":
-                return "down"
-            else:
-                return "up"
+        return None
+    
+
+
+
+    # x, y = robot.pos_x, robot.pos_y
+    # if (x, y) == (4, 1) or (x, y) == (1, 5) or (x, y) == (3, 5):
+    #     return "left"
+    # elif (x, y) == (4, 2) or (x, y) == (4, 3) or (x, y) == (4, 4):
+    #     return "up"
+    # elif (x, y) == (1, 1) or (x, y) == (3, 1) or (x, y) == (2, 5): # (1, 5) 
+    #     return "right"
+    # elif (x, y) == (2, 3):
+    #     return "down"
+    # else:
+    #     if (x, y) == (2, 2):
+    #         if dest == "bap_mount":
+    #             return "down"
+    #         else:
+    #             return "up"
 
 
         # other conditions to check if at (2, 4) -> up or down or if at (1, 3) -> left or right
