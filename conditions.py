@@ -151,6 +151,10 @@ class Gridworld:
         # print(b)
         # print("Print_done")
         def bfs_to_target(search_space, start):
+            if not any("D" in row for row in search_space):
+                return None, None, None
+
+
             labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
             # Bredth first search
             # maintain a queue of paths
@@ -226,6 +230,8 @@ class Gridworld:
                     search_space[i][j] = "D"
 
         labelled_space, target, pre_target = bfs_to_target(search_space, start)
+        if labelled_space == None:
+            return False
         sub_paths = get_sub_paths(pre_target, labelled_space)
         # print('output')
         # print([(path + [target]) for path in sub_paths])
@@ -543,22 +549,41 @@ def robot_move(robot):
 
 	if(robot.state == "idle"):
 		print('') if robot.pos_x == 0 and robot.pos_y == 5 else robot_move_to(robot, "idle_state", False)
-	elif robot.state in ["place_bap", "place_burger", "cook_burger", "place_cheese"]:
+
+	elif robot.state in ["place_bap", "place_burger", "cook_burger", "place_cheese", "deliver_burger"]:
 		if robot.hand == "empty":
-			robot_move_to(robot, robot.source_pos, True)
+			done = robot_move_to(robot, robot.source_pos, True)
+			if done and robot.hand == "empty":
+				robot.state = "idle"
+
 		elif robot.hand == robot.desired_hand:
 			done = robot_move_to(robot, robot.target_pos, True)
+
 			if done: #got to target pos and pressed space
 				robot.state = "idle"
+				if robot.hand != "empty":
+					robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+		
 		else:
 			print("Uh oh hands full")
 			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
+			robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+    
+	elif robot.state == "dump":
+		if robot.hand != "empty":
+			done = robot_move_to(robot, robot.target_pos, True)
+			if done and robot.hand != "empty":
+				#we failed to place again, find a new empty space
+				robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+		else:
+			#hands are finally free, go idle and get new job
+			robot.state = "idle"
 
 	else:
 		raise Exception(f"UNKNOWN STATE: {robot.state}")
 
 
-def robot_determine_state(robot):
+def robot_determine_state(robot, dump_state=False):
 
     # raw_burger_coords = (4, 1, 'left')
 
@@ -568,8 +593,16 @@ def robot_determine_state(robot):
     storage = [grid_world.gw[1][0].piece, grid_world.gw[2][0].piece, grid_world.gw[3][0].piece, grid_world.gw[3][4].piece]
     # storage_coords = [(1, 1, 'left'), (2, 1, 'left'), (3, 1, 'left'), (2, 4, 'down'), (3, 5, 'left'), (4, 4, 'up')]
 
+    if dump_state:
+        if (find_item("empty_counter", storage)) != -1:
+            return ("dump", None, "empty_counter", "empty")
+        else:
+            return ("idle", None, None, None)
+
+    if ((find_item('empty', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('raw_burger', storage)) != -1):
+        return ("cook_burger", "raw_burger", "empty_pan", 'raw_burger')
     if ((find_item('empty', pans)) != -1) and ((find_item('empty', hand)) != -1):
-        return ("cook_burger", "raw_burger_mount", "empty_pan", 'raw_burger')
+        return ("cook_burger", "raw_burger_mount", "empty_pan", 'raw_burger')    
     elif ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
         return ("place_burger", "cooked_burger_pan", "bap", "cooked_burger")
     elif  ((find_item('cooked_burger', pans)) != -1) and ((find_item('empty', hand)) != -1) and ((find_item('bap_cheese', storage)) != -1):
@@ -580,6 +613,10 @@ def robot_determine_state(robot):
         return ("place_bap", "bap_mount", "bap_burger_cheese", "bap")
     elif ((find_item('empty', hand)) != -1) and ((find_item('bap', storage)) != -1):
         return ("place_cheese", "cheese_mount", "bap", "cheese")
+    elif ((find_item('empty', hand)) != -1) and ((find_item('bap_burger_cheese_bap', storage)) != -1):
+        return ("deliver_burger", "bap_burger_cheese_bap", "exit_counter", "bap_burger_cheese_bap")
+    elif ((find_item('empty', hand)) != -1) and ((find_item('empty_counter', storage)) != -1):
+        return ("place_bap", "bap_mount", "empty_counter", "bap")
     else:
         return ("idle", None, None, None)
 
@@ -594,7 +631,12 @@ def robot_move_to(robot, dest, press_space=True):
 	# print(f"in state: {robot.state}")
     print("dest")
     print(dest)
-    path = grid_world.find_shortest_paths("robot", dest)[0]
+    path = grid_world.find_shortest_paths("robot", dest)
+
+    if path == False:
+        return True
+
+    path = path[0]
     path = path[1:] if path[-1] == (0, 5) else path[1:-1]
 
     print(path)
@@ -662,30 +704,11 @@ def find_direction(robot, dest):
         return "left"
     elif (x, y) == (3, 5):
         return "left"
+    elif (x, y) == (4, 5):
+        return "right"
     else:
         return None
     
-
-
-
-    # x, y = robot.pos_x, robot.pos_y
-    # if (x, y) == (4, 1) or (x, y) == (1, 5) or (x, y) == (3, 5):
-    #     return "left"
-    # elif (x, y) == (4, 2) or (x, y) == (4, 3) or (x, y) == (4, 4):
-    #     return "up"
-    # elif (x, y) == (1, 1) or (x, y) == (3, 1) or (x, y) == (2, 5): # (1, 5) 
-    #     return "right"
-    # elif (x, y) == (2, 3):
-    #     return "down"
-    # else:
-    #     if (x, y) == (2, 2):
-    #         if dest == "bap_mount":
-    #             return "down"
-    #         else:
-    #             return "up"
-
-
-        # other conditions to check if at (2, 4) -> up or down or if at (1, 3) -> left or right
 
 def find_move(robot, dir):
     if dir  == "right":
