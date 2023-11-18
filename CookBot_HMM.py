@@ -47,16 +47,42 @@ states = [
 ]
 
 state_targets = {
-    "grab_raw_burger": {"empty":["raw_burger_mount","raw_burger"]},
-    "cook_raw_burger": {"raw_burger":["empty_pan"]},
-    "grab_cooked_burger": {"empty":["cooked_burger_pan","cooked_burger"]},
-    "grab_cheese": {"empty":["cheese_mount","cheese"]},
-    "grab_bap": {"empty":["bap_mount","bap"]},
-    "combine_bap_burger": {"bap":["cooked_burger"],"cooked_burger":["bap"]},
-    "combine_bap_cheese": {"bap":["cheese"],"cheese":["bap"]}, 
-    "combine_bap_cheese_burger": {"bap_burger":["cheese"],"cheese":["bap_burger"],"bap_cheese":["cooked_burger"],"cooked_burger":["bap_cheese"]},
-    "combine_bap_cheese_burger_bap": {"bap":["bap_burger_cheese"],"bap_burger_cheese":["bap"]},
-    "deliver_cheeseburger": {"bap_burger_cheese_bap":["exit_counter"]}
+    "grab_raw_burger": {
+        "empty":["raw_burger_mount","raw_burger"],
+        "raw_burger":["empty_counter"]},
+    "cook_raw_burger": {
+        "empty":["raw_burger"],
+        "raw_burger":["empty_pan"]},
+    "grab_cooked_burger": {
+        "empty":["cooked_burger_pan","cooked_burger"]},
+        "cooked_burger":["empty_counter"],
+    "grab_cheese": {
+        "empty":["cheese_mount","cheese"]},
+        "cheese":["empty_counter"],
+    "grab_bap": {
+        "empty":["bap_mount","bap"]},
+        "bap":["empty_counter"],
+    "combine_bap_burger": {
+        "empty":["cooked_burger","bap"],
+        "bap":["cooked_burger"],
+        "cooked_burger":["bap"]},
+    "combine_bap_cheese": {
+        "empty":["cheese","bap"],
+        "bap":["cheese"],
+        "cheese":["bap"]}, 
+    "combine_bap_cheese_burger": {
+        "empty":["bap_cheese","cheese","cooked_burger","cheese"],
+        "bap_burger":["cheese"],
+        "cheese":["bap_burger"],
+        "bap_cheese":["cooked_burger"],
+        "cooked_burger":["bap_cheese"]},
+    "combine_bap_cheese_burger_bap": {
+        "empty":["bap","bap_burger_cheese"],
+        "bap":["bap_burger_cheese"],
+        "bap_burger_cheese":["bap"]},
+    "deliver_cheeseburger": {
+        "empty":["bap_burger_cheese_bap"],
+        "bap_burger_cheese_bap":["exit_counter"]}
 }
 
 state_map = {}
@@ -539,30 +565,30 @@ class UserModel:
         piece_map = grid_world.get_piece_map(person.hand)
         can_reach_state_array = np.zeros(10)
         # "grab_raw_burger",
-        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand == "empty")
+        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty","raw_burger"])
         # "cook_raw_burger",
-        can_reach_state_array[state_map['cook_raw_burger']] = ((person.hand == "raw_burger") and ('empty_pan' in piece_map))
+        can_reach_state_array[state_map['cook_raw_burger']] = ((('empty_pan' in piece_map) and ('raw_burger' in piece_map)) and (person.hand in ["empty","raw_burger"]))
         # "grab_cooked_burger",
-        can_reach_state_array[state_map['grab_cooked_burger']] = ((person.hand == "empty") and ('cooked_burger_pan' in piece_map))
+        can_reach_state_array[state_map['grab_cooked_burger']] = ((('cooked_burger_pan' in piece_map) or ("cooked_burger" in piece_map)) and (person.hand in ["empty","cooked_burger"]))
         # "grab_cheese",
-        can_reach_state_array[state_map['grab_cheese']] = (person.hand == "empty")
+        can_reach_state_array[state_map['grab_cheese']] = (person.hand in ["empty","cheese"])
         # "grab_bap",
-        can_reach_state_array[state_map['grab_bap']] = (person.hand == "empty")
+        can_reach_state_array[state_map['grab_bap']] = (person.hand in ["empty","bap"])
         # "combine_bap_burger",
-        can_reach_state_array[state_map['combine_bap_burger']] = (((person.hand == "bap") and ('cooked_burger' in piece_map)) or ((person.hand == "cooked_burger") and ('bap' in piece_map)))
+        can_reach_state_array[state_map['combine_bap_burger']] = ((('cooked_burger' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cooked_burger","bap"]))
         # "combine_bap_cheese",
-        can_reach_state_array[state_map['combine_bap_cheese']] = (((person.hand == "bap") and ('cheese' in piece_map)) or ((person.hand == "cheese") and ('bap' in piece_map)))
+        can_reach_state_array[state_map['combine_bap_cheese']] = ((('cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cheese","bap"]))
         # "combine_bap_cheese_burger",
-        can_reach_state_array[state_map['combine_bap_cheese_burger']] = ((((person.hand == "cheese") and ('bap_burger' in piece_map)) or ((person.hand == "bap_burger") and ('cheese' in piece_map))) or (((person.hand == "bap_cheese") and ('cooked_burger' in piece_map)) or ((person.hand == "cooked_burger") and ('bap_cheese' in piece_map)))) 
+        can_reach_state_array[state_map['combine_bap_cheese_burger']] = (((('bap_burger' in piece_map) and ('cheese' in piece_map)) or ('cooked_burger' in piece_map) and ('bap_cheese' in piece_map)) and (person.hand in ["empty","cheese","bap","bap_burger",'bap_cheese']))
         # "combine_bap_cheese_burger_bap",
-        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = (((person.hand == "bap") and ('bap_burger_cheese' in piece_map)) or ((person.hand == "bap_burger_cheese") and ('bap' in piece_map)))
+        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = ((('bap_burger_cheese' in piece_map) and ('bap' in piece_map)) and ('bap_cheese' in piece_map)) and (person.hand in ["empty","bap",'bap_burger_cheese'])
         # "deliver_cheeseburger",
-        can_reach_state_array[state_map['deliver_cheeseburger']] = (person.hand == "bap_burger_cheese_bap")
+        can_reach_state_array[state_map['deliver_cheeseburger']] = ("bap_burger_cheese_bap" in piece_map) and (person.hand in ["empty",'bap_burger_cheese_bap'])
 
         #Normalise here and adjust for distance
         n = can_reach_state_array/can_reach_state_array.sum()
         self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
-        print(self.transition_probabilities)
+
 
     def update_emission_probabilites(self, person, grid_world):
         self.emission_probabilities = np.zeros((5, 10))
@@ -573,10 +599,8 @@ class UserModel:
             if person.hand in possible_actions:
                 paths = grid_world.find_shortest_paths("person", possible_actions[person.hand])
                 if paths == False:
-                    if person.hand != "empty":
-                        paths = grid_world.find_shortest_paths("person", ["empty_counter"])
-                    else:
-                        continue
+                    # Not found continue
+                    continue
                 probs = self.get_ob_probs_to_piece(person, grid_world, paths)
             else:
                 continue
@@ -601,6 +625,8 @@ class UserModel:
         self.update_transition_probabilities(person, grid_world)
         print(self.transition_probabilities)
         self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
+
+        print(self.prob_state)
 
         self.update_emission_probabilites(person, grid_world)
 
