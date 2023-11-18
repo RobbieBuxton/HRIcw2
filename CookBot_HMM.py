@@ -46,22 +46,18 @@ states = [
     "deliver_cheeseburger",
 ]
 
-state_targets = [
-    "raw_burger_mount",
-    ### Temporary
-    # 'empty_pan',
-    # 'burger_pan',
-    "none",
-    "none",
-    "cheese_mount",
-    "bap_mount",
-    ### Temporary
-    "none",
-    "none",
-    "none",
-    "none",
-    "none",
-]
+state_targets = {
+    "grab_raw_burger": {"empty":["raw_burger_mount","raw_burger"]},
+    "cook_raw_burger": {"raw_burger":["empty_pan"]},
+    "grab_cooked_burger": {"empty":["cooked_burger_pan","cooked_burger"]},
+    "grab_cheese": {"empty":["cheese_mount","cheese"]},
+    "grab_bap": {"empty":["bap_mount","bap"]},
+    "combine_bap_burger": {"bap":["cooked_burger"],"cooked_burger":["bap"]},
+    "combine_bap_cheese": {"bap":["cheese"],"cheese":["bap"]}, 
+    "combine_bap_cheese_burger": {"bap_burger":["cheese"],"cheese":["bap_burger"],"bap_cheese":["cooked_burger"],"cooked_burger":["bap_cheese"]},
+    "combine_bap_cheese_burger_bap": {"bap":["bap_burger_cheese"],"bap_burger_cheese":["bap"]},
+    "deliver_cheeseburger": {"bap_burger_cheese_bap":["exit_counter"]}
+}
 
 state_map = {}
 for idx, state in enumerate(states):
@@ -185,8 +181,11 @@ class Gridworld:
             self.gw[6][2].image = images[piece]
 
 
-    def get_piece_map(self):
-        piece_map = {}
+    def get_piece_map(self, hand):
+        piece_map={}
+        if hand != "empty":
+            piece_map[hand] = 1
+        
         for x in range(GRID_WIDTH):
             for y in range(GRID_HEIGHT):
                 piece = self.gw[x][y].piece
@@ -198,7 +197,7 @@ class Gridworld:
         return piece_map
 
     # A and B are pieces that are not the floor
-    def find_shortest_paths(self, a, b):
+    def find_shortest_paths(self, a, bs):
        
         def bfs_to_target(search_space, start):
             labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
@@ -265,6 +264,7 @@ class Gridworld:
         # Initialise problem
         search_space = [["#" for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
         start = (-1, -1)
+        found_d = False
         for i in range(GRID_HEIGHT):
             for j in range(GRID_WIDTH):
                 if self.gw[i][j].piece == "floor":
@@ -272,9 +272,12 @@ class Gridworld:
                 if self.gw[i][j].piece == a:
                     search_space[i][j] = "S"
                     start = (i, j)
-                if self.gw[i][j].piece == b:
+                if self.gw[i][j].piece in bs:
                     search_space[i][j] = "D"
-
+                    found_d = True
+                    
+        if not found_d:
+            return False
         labelled_space, target, pre_target = bfs_to_target(search_space, start)
         sub_paths = get_sub_paths(pre_target, labelled_space)
         return [(path + [target]) for path in sub_paths]
@@ -533,46 +536,56 @@ class UserModel:
         # TODO: create other needed variables
 
     def update_transition_probabilities(self, person, grid_world):
-        self.transition_probabilities = np.zeros((10,10))
-        print(grid_world.get_piece_map())
-        if person.hand == "raw_burger":
-                idx = state_map["cook_raw_burger"]
-                self.transition_probabilities[idx,idx] = 1
-        
-        elif person.hand == "bap_burger_cheese_bap":
-                idx = state_map["deliver_cheeseburger"]
-                self.transition_probabilities[idx,idx] = 1
-        else:
-            self.transition_probabilities = np.matrix(
-                [
-                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                ],
-                np.float32,
-            )
+        piece_map = grid_world.get_piece_map(person.hand)
+        can_reach_state_array = np.zeros(10)
+        # "grab_raw_burger",
+        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand == "empty")
+        # "cook_raw_burger",
+        can_reach_state_array[state_map['cook_raw_burger']] = ((person.hand == "raw_burger") and ('empty_pan' in piece_map))
+        # "grab_cooked_burger",
+        can_reach_state_array[state_map['grab_cooked_burger']] = ((person.hand == "empty") and ('cooked_burger_pan' in piece_map))
+        # "grab_cheese",
+        can_reach_state_array[state_map['grab_cheese']] = (person.hand == "empty")
+        # "grab_bap",
+        can_reach_state_array[state_map['grab_bap']] = (person.hand == "empty")
+        # "combine_bap_burger",
+        can_reach_state_array[state_map['combine_bap_burger']] = (((person.hand == "bap") and ('cooked_burger' in piece_map)) or ((person.hand == "cooked_burger") and ('bap' in piece_map)))
+        # "combine_bap_cheese",
+        can_reach_state_array[state_map['combine_bap_cheese']] = (((person.hand == "bap") and ('cheese' in piece_map)) or ((person.hand == "cheese") and ('bap' in piece_map)))
+        # "combine_bap_cheese_burger",
+        can_reach_state_array[state_map['combine_bap_cheese_burger']] = ((((person.hand == "cheese") and ('bap_burger' in piece_map)) or ((person.hand == "bap_burger") and ('cheese' in piece_map))) or (((person.hand == "bap_cheese") and ('cooked_burger' in piece_map)) or ((person.hand == "cooked_burger") and ('bap_cheese' in piece_map)))) 
+        # "combine_bap_cheese_burger_bap",
+        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = (((person.hand == "bap") and ('bap_burger_cheese' in piece_map)) or ((person.hand == "bap_burger_cheese") and ('bap' in piece_map)))
+        # "deliver_cheeseburger",
+        can_reach_state_array[state_map['deliver_cheeseburger']] = (person.hand == "bap_burger_cheese_bap")
+
+        #Normalise here and adjust for distance
+        n = can_reach_state_array/can_reach_state_array.sum()
+        self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
+        print(self.transition_probabilities)
 
     def update_emission_probabilites(self, person, grid_world):
         self.emission_probabilities = np.zeros((5, 10))
         for i in range(10):
             state = states[i]
-            if state_targets[i] == "none":
+
+            possible_actions = state_targets[state]
+            if person.hand in possible_actions:
+                paths = grid_world.find_shortest_paths("person", possible_actions[person.hand])
+                if paths == False:
+                    if person.hand != "empty":
+                        paths = grid_world.find_shortest_paths("person", ["empty_counter"])
+                    else:
+                        continue
+                probs = self.get_ob_probs_to_piece(person, grid_world, paths)
+            else:
                 continue
-            probs = self.get_ob_probs_to_piece(person, grid_world, state)
             for k in range(5):
                 self.emission_probabilities[k, i] = probs[k]
+        print("")
+        print(self.emission_probabilities)
 
-    def get_ob_probs_to_piece(self, person, grid_world, state):
-        paths = grid_world.find_shortest_paths(
-            "person", state_targets[state_map[state]]
-        )
+    def get_ob_probs_to_piece(self, person, grid_world, paths):
         obs_lists = [self.path_to_obs_list(path, person) for path in paths]
         obs_head_lists = set([ob_list[0] for ob_list in obs_lists])
         probs = np.zeros((5))
