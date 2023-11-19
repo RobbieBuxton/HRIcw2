@@ -194,7 +194,7 @@ class Gridworld:
 
             # If the queue is empty and target is not found
             return None, (-1, -1), None
-            
+
         # Guarentee of no hitting out of bounds
         def get_sub_paths(pos, labelled_space):
             paths = []
@@ -257,6 +257,7 @@ class Player:
         self.source_pos = None
         self.target_pos = None
         self.desired_hand= None
+        self.path = []
 
         grid_world.gw[x][y] = GridBox(images[c], c)
 
@@ -444,7 +445,7 @@ def load_images():
     return images
 
 
-def display_screen(end_time):
+def display_screen(end_time, robot, condition):
     # Clear the screen
     window.fill((255, 255, 255))
 
@@ -468,6 +469,20 @@ def display_screen(end_time):
     window.blit(person_hand, (0 * IMAGE_WIDTH, 5 * IMAGE_HEIGHT + 50))
     window.blit(robot_hand, (2 * IMAGE_WIDTH, 5 * IMAGE_HEIGHT + 50))
 
+
+    if condition == 1:
+        pygame.display.flip()
+        return
+
+    for pos in robot.path[1:]:
+        grid_x, grid_y = pos
+        center_x = grid_x * IMAGE_WIDTH + IMAGE_WIDTH // 2
+        center_y = grid_y * IMAGE_HEIGHT + IMAGE_HEIGHT // 2
+        pygame.draw.circle(window, (255, 0, 0), (center_y, center_x), 5)  # re
+
+        if condition == 2:
+            break
+
     # Update the display
     pygame.display.flip()
 
@@ -490,7 +505,7 @@ grid_world = Gridworld()
 grid_world.fill_initial_grid(images)
 
 
-def main():
+def main(condition=1):
     # creates the person and the robot players
     person = Player("person", 2, 2)
     robot = Player("robot", 2, 4)
@@ -531,7 +546,7 @@ def main():
             robot_move_timer = time.time() + 0.5
             robot_move(robot)
 
-        display_screen(end_time)
+        display_screen(end_time, robot, condition)
 
     # Quit pygame
     pygame.quit()
@@ -642,6 +657,8 @@ def robot_move_to(robot, dest, press_space=True):
 
     path = path[0]
     path = path[1:] if path[-1] == (0, 5) else path[1:-1]
+    robot.path = path
+
 
     print(path)
 
@@ -725,4 +742,4 @@ def find_move(robot, dir):
         return (robot.pos_x + 1, robot.pos_y)
 
 if __name__ == "__main__":
-    main()
+    main(3)
