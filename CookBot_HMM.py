@@ -472,6 +472,10 @@ class Player:
                 self.hand = "empty"
                 grid_loc.update("bap_burger")
                 grid_world.update_hand("empty_counter", self.char)
+            if self.hand == "bap_cheese":
+                self.hand = "empty"
+                grid_loc.update("bap_burger_cheese")
+                grid_world.update_hand("empty_counter", self.char)
 
         if grid_loc.piece == "bap_burger":
             if self.hand == "cheese":
@@ -562,18 +566,12 @@ class UserModel:
             []
         )  # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
 
-        self._init_prob_state = np.zeros((10, 1))
-        self._init_prob_state[state_map["grab_raw_burger"]] = 0.333
-        self._init_prob_state[state_map["grab_cheese"]] = 0.333
-        self._init_prob_state[state_map["grab_bap"]] = 0.333
-
-        self.prob_state = self._init_prob_state
+        self.prob_state = np.ones((10, 1))/10.0
 
         # TODO: create other needed variables
 
-    def update_transition_probabilities(self, person, grid_world):
+    def generate_can_reach_state_array(self, person, grid_world):
         piece_map = grid_world.get_piece_map(person.hand)
-        print(piece_map)
         can_reach_state_array = np.zeros(10)
         # "grab_raw_burger",
         can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty","raw_burger"])
@@ -595,24 +593,24 @@ class UserModel:
         can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = ((('bap_burger_cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","bap",'bap_burger_cheese']))
         # "deliver_cheeseburger",
         can_reach_state_array[state_map['deliver_cheeseburger']] = ("bap_burger_cheese_bap" in piece_map) and (person.hand in ["empty",'bap_burger_cheese_bap'])
+        return can_reach_state_array
 
+    def update_transition_probabilities(self, can_reach_state_array):
+        
         #Normalise here and adjust for distance
         n = can_reach_state_array/can_reach_state_array.sum()
         self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
 
 
-    def update_emission_probabilites(self, person, grid_world):
+    def update_emission_probabilites(self, person, grid_world, can_reach_state):
         self.emission_probabilities = np.zeros((5, 10))
         for i in range(10):
-            possible_actions = state_targets[states[i]]            
-            if person.hand in possible_actions:
-                paths = grid_world.find_shortest_paths("person", possible_actions[person.hand])
+            if can_reach_state[i]:
+                paths = grid_world.find_shortest_paths("person", state_targets[states[i]][person.hand])
                 if paths:
                     probs = self.get_ob_probs_to_piece(person, grid_world, paths)
                     for k in range(5):
                         self.emission_probabilities[k, i] = probs[k]
-        print("")
-        print(self.emission_probabilities)
 
     def get_ob_probs_to_piece(self, person, grid_world, paths):
         obs_lists = [self.path_to_obs_list(path, person) for path in paths]
@@ -625,22 +623,19 @@ class UserModel:
     def update_user_action_probabilities(self, user_obs, person, robot, grid_world):
         # TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
         # self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
+        can_reach_state = self.generate_can_reach_state_array(person, grid_world)
+        
         print("\n##################")
-        print(person.hand)
-        self.update_transition_probabilities(person, grid_world)
-        print(self.transition_probabilities)
+        self.update_transition_probabilities(can_reach_state)
+        self.update_emission_probabilites(person, grid_world, can_reach_state)
+
         self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
-
         print(self.prob_state)
-
-        self.update_emission_probabilites(person, grid_world)
-
         prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
 
         for idx, action in enumerate(prob_actions):
-            print(str(obs[idx]) + ": " + str(action))
+            print(str(obs[idx]) + ": " + str(action[0]))
         
-
         return list(prob_actions)
 
     def print_accuracy_of_predictions(self):
