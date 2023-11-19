@@ -47,39 +47,49 @@ states = [
 ]
 
 state_targets = {
+    #Grab Raw Burger
     "grab_raw_burger": {
         "empty":["raw_burger_mount","raw_burger"],
         "raw_burger":["empty_counter"]},
+    #Cook Raw Burger
     "cook_raw_burger": {
         "empty":["raw_burger"],
         "raw_burger":["empty_pan"]},
+    #Grab Cooked Burger
     "grab_cooked_burger": {
-        "empty":["cooked_burger_pan","cooked_burger"]},
-        "cooked_burger":["empty_counter"],
+        "empty":["cooked_burger_pan","cooked_burger"],
+        "cooked_burger":["empty_counter"]},
+    #Grab Cheese
     "grab_cheese": {
-        "empty":["cheese_mount","cheese"]},
-        "cheese":["empty_counter"],
+        "empty":["cheese_mount","cheese"],
+        "cheese":["empty_counter"]},
+    #Grab Bap
     "grab_bap": {
-        "empty":["bap_mount","bap"]},
-        "bap":["empty_counter"],
+        "empty":["bap_mount","bap"],
+        "bap":["empty_counter"]},
+    #Combine Bap Burger
     "combine_bap_burger": {
         "empty":["cooked_burger","bap"],
         "bap":["cooked_burger"],
         "cooked_burger":["bap"]},
+    #Combine Bap Cheese
     "combine_bap_cheese": {
         "empty":["cheese","bap"],
         "bap":["cheese"],
-        "cheese":["bap"]}, 
+        "cheese":["bap"]},
+    #Combine Bap Cheese Burger   
     "combine_bap_cheese_burger": {
         "empty":["bap_cheese","cheese","cooked_burger","cheese"],
         "bap_burger":["cheese"],
         "cheese":["bap_burger"],
         "bap_cheese":["cooked_burger"],
         "cooked_burger":["bap_cheese"]},
+    #Combine Bap Cheese Burger Bap
     "combine_bap_cheese_burger_bap": {
         "empty":["bap","bap_burger_cheese"],
         "bap":["bap_burger_cheese"],
         "bap_burger_cheese":["bap"]},
+    #Deliver Cheeseburger
     "deliver_cheeseburger": {
         "empty":["bap_burger_cheese_bap"],
         "bap_burger_cheese_bap":["exit_counter"]}
@@ -563,6 +573,7 @@ class UserModel:
 
     def update_transition_probabilities(self, person, grid_world):
         piece_map = grid_world.get_piece_map(person.hand)
+        print(piece_map)
         can_reach_state_array = np.zeros(10)
         # "grab_raw_burger",
         can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty","raw_burger"])
@@ -579,9 +590,9 @@ class UserModel:
         # "combine_bap_cheese",
         can_reach_state_array[state_map['combine_bap_cheese']] = ((('cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cheese","bap"]))
         # "combine_bap_cheese_burger",
-        can_reach_state_array[state_map['combine_bap_cheese_burger']] = (((('bap_burger' in piece_map) and ('cheese' in piece_map)) or ('cooked_burger' in piece_map) and ('bap_cheese' in piece_map)) and (person.hand in ["empty","cheese","bap","bap_burger",'bap_cheese']))
+        can_reach_state_array[state_map['combine_bap_cheese_burger']] = (((('bap_burger' in piece_map) and ('cheese' in piece_map)) or (('cooked_burger' in piece_map) and ('bap_cheese' in piece_map))) and (person.hand in ["empty","cheese","cooked_burger","bap_burger",'bap_cheese']))
         # "combine_bap_cheese_burger_bap",
-        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = ((('bap_burger_cheese' in piece_map) and ('bap' in piece_map)) and ('bap_cheese' in piece_map)) and (person.hand in ["empty","bap",'bap_burger_cheese'])
+        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = ((('bap_burger_cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","bap",'bap_burger_cheese']))
         # "deliver_cheeseburger",
         can_reach_state_array[state_map['deliver_cheeseburger']] = ("bap_burger_cheese_bap" in piece_map) and (person.hand in ["empty",'bap_burger_cheese_bap'])
 
@@ -593,19 +604,13 @@ class UserModel:
     def update_emission_probabilites(self, person, grid_world):
         self.emission_probabilities = np.zeros((5, 10))
         for i in range(10):
-            state = states[i]
-
-            possible_actions = state_targets[state]
+            possible_actions = state_targets[states[i]]            
             if person.hand in possible_actions:
                 paths = grid_world.find_shortest_paths("person", possible_actions[person.hand])
-                if paths == False:
-                    # Not found continue
-                    continue
-                probs = self.get_ob_probs_to_piece(person, grid_world, paths)
-            else:
-                continue
-            for k in range(5):
-                self.emission_probabilities[k, i] = probs[k]
+                if paths:
+                    probs = self.get_ob_probs_to_piece(person, grid_world, paths)
+                    for k in range(5):
+                        self.emission_probabilities[k, i] = probs[k]
         print("")
         print(self.emission_probabilities)
 
