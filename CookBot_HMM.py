@@ -79,7 +79,7 @@ state_targets = {
         "cheese":["bap"]},
     #Combine Bap Cheese Burger   
     "combine_bap_cheese_burger": {
-        "empty":["bap_cheese","cheese","cooked_burger","cheese"],
+        "empty":["bap_cheese","bap_burger","cooked_burger","cheese"],
         "bap_burger":["cheese"],
         "cheese":["bap_burger"],
         "bap_cheese":["cooked_burger"],
@@ -561,6 +561,14 @@ def get_largest_idx(vector):
 
 class UserModel:
     def __init__(self):
+        self.paths_lens_history = []
+        self.old_piece_map = grid_world.get_piece_map("empty")
+        self.last_state = -1
+        self.ticks_since_state_change = 0
+
+        for i in range(5):
+            self.paths_lens_history.append([-1]*10)
+
         self.users_real_actions = []
         self.users_predicted_actions = (
             []
@@ -570,8 +578,7 @@ class UserModel:
 
         # TODO: create other needed variables
 
-    def generate_can_reach_state_array(self, person, grid_world):
-        piece_map = grid_world.get_piece_map(person.hand)
+    def generate_can_reach_state_array(self, person, piece_map):
         can_reach_state_array = np.zeros(10)
         # "grab_raw_burger",
         can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty"])
@@ -595,22 +602,36 @@ class UserModel:
         can_reach_state_array[state_map['deliver_cheeseburger']] = ("bap_burger_cheese_bap" in piece_map) and (person.hand in ["empty",'bap_burger_cheese_bap'])
         return can_reach_state_array
 
-    def update_transition_probabilities(self, can_reach_state_array):
+    #Scale by how far away we are from the emission target
+    def distance_factor(self, paths_lens, idx):
+        total = 0
+        for i in range(len(paths_lens)):
+            if paths_lens[i] != -1:
+                total += paths_lens[i]
+        return total/paths_lens[idx]
+
+
+    def update_transition_probabilities(self):
         #Normalise here and adjust for distance
-        n = can_reach_state_array/can_reach_state_array.sum()
+        n = np.zeros(10)
+        last_paths_lens = self.paths_lens_history[-1]
+        for i in range(len(last_paths_lens)):
+            if last_paths_lens[i] != -1:
+                n[i] = self.distance_factor(last_paths_lens,i)
+
+        n /= n.sum()
+        print(n)
         self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
 
 
-    def update_emission_probabilites(self, person, grid_world, can_reach_state):
+    def update_emission_probabilites(self, person, grid_world, paths):
         self.emission_probabilities = np.zeros((5, 10))
-        for i in range(10):
-            if can_reach_state[i]:
-                paths = grid_world.find_shortest_paths("person", state_targets[states[i]][person.hand])
-                if paths:
-                    probs = self.get_ob_probs_to_piece(person, grid_world, paths)
-                    for k in range(5):
-                        self.emission_probabilities[k, i] = probs[k]
-
+        for i in range(len(paths)):
+            if paths[i] != None:
+                probs = self.get_ob_probs_to_piece(person, grid_world, paths[i])
+                for k in range(5):
+                    self.emission_probabilities[k, i] = probs[k]
+     
     def get_ob_probs_to_piece(self, person, grid_world, paths):
         obs_lists = [self.path_to_obs_list(path, person) for path in paths]
         obs_head_lists = set([ob_list[0] for ob_list in obs_lists])
@@ -619,29 +640,83 @@ class UserModel:
             probs[ob] = 1.0 / len(obs_head_lists)
         return probs
 
+    def get_piece_map_difference(self,old_piece_map,new_piece_map):
+        a = set(new_piece_map.items())
+        b = set(old_piece_map.items())
+        return [[val[0] for val in b-a], [val[0] for val in a-b]]
+
+
+    def determine_last_state(self,piece_map_difference):
+        before = piece_map_difference[0]
+        after = piece_map_difference[1]
+        print(str(before) + ":" + str(after))
+        if "raw_burger" in after:
+            return state_map["grab_raw_burger"]
+        if 'raw_burger' in before and 'burger_pan' in after:
+            return state_map["cook_raw_burger"]
+        if ('cooked_burger_pan' in before or 'burger_pan' in before) and 'cooked_burger' in after:
+            return state_map["grab_cooked_burger"]
+        if 'cheese' in after:
+            return state_map["grab_cheese"]
+        if 'bap' in after:
+            return state_map["grab_bap"]
+        if 'bap' in before and 'cooked_burger' in before and 'bap_burger' in after:
+            return state_map["combine_bap_burger"]
+        if 'bap' in before and 'cheese' in before and 'bap_cheese' in after:
+            return state_map["combine_bap_cheese"]
+        if (('cheese' in before and 'bap_burger' in before) or ('cooked_burger' in before and 'bap_cheese' in before)) and "bap_burger_cheese" in after: 
+            return state_map["combine_bap_cheese_burger"]
+        if 'bap' in before and 'bap_burger_cheese' in before and 'bap_burger_cheese_bap' in after:
+            return state_map['combine_bap_cheese_burger_bap']
+        if 'bap_cheese_burger_bap' in before:
+            return state_map['deliver_cheeseburger']
+        return "none" 
+
     def update_user_action_probabilities(self, user_obs, person, robot, grid_world):
-        # TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
-        # self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
-        can_reach_state = self.generate_can_reach_state_array(person, grid_world)
+        piece_map = grid_world.get_piece_map(person.hand)
+
+        piece_map_difference = self.get_piece_map_difference(self.old_piece_map,piece_map)
+        self.old_piece_map = piece_map
+
+        if len(piece_map_difference) > 0:
+            last_state = self.determine_last_state(piece_map_difference)
+            if last_state != "none":
+                print(states[last_state])   
+                for i in range(self.ticks_since_state_change):
+                    self.users_real_actions.append(last_state)
+                print(self.users_real_actions)
+                self.ticks_since_state_change = 0
+                self.last_state = last_state
         
+        print(self.ticks_since_state_change)
+        can_reach_state = self.generate_can_reach_state_array(person, piece_map)
+
+        paths = [None]*len(can_reach_state)
+        paths_lens = [-1]*len(can_reach_state)
+        for i in range(len(can_reach_state)):
+            if can_reach_state[i]:
+                paths[i] = grid_world.find_shortest_paths("person", state_targets[states[i]][person.hand])
+                #Currently doesn't account for facing the same direction
+                paths_lens[i] = len(paths[i][0]) - 1
+        self.paths_lens_history.append(paths_lens)
+
         print("###########################ß")
         #Check if you need to drop the item
         if (can_reach_state.sum() == 0):
-            paths = grid_world.find_shortest_paths("person", "empty_counter")
-            prob_actions = np.array(self.get_ob_probs_to_piece(person, grid_world, paths))
+            paths_to_drop = grid_world.find_shortest_paths("person", "empty_counter")
+            prob_actions = np.array(self.get_ob_probs_to_piece(person, grid_world, paths_to_drop))
             prob_actions.shape = (5,1)
         else:
-            self.update_transition_probabilities(can_reach_state)
-            self.update_emission_probabilites(person, grid_world, can_reach_state)
+            self.update_transition_probabilities()
+            self.update_emission_probabilites(person, grid_world, paths)
 
             self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
-            print(self.prob_state)
             prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
         
-        print(prob_actions)
         for idx, action in enumerate(prob_actions):
-            print(str(obs[idx]) + ": " + str(action[0]))
+            print(str(obs[idx]) + ": " + "{:.3f}".format(action[0]))
         
+        self.ticks_since_state_change+=1
         return list(prob_actions)
 
     def print_accuracy_of_predictions(self):
@@ -650,8 +725,6 @@ class UserModel:
         # print the predicted next user's actions
         # print the percentage of actions predicted correctly.
         pass
-
-        # This can probably be merged into BFS but currently useful to be seperate for debugging
 
     def path_to_obs_list(self, path, person):
         obs = []
