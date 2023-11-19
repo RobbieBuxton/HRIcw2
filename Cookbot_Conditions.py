@@ -1,11 +1,10 @@
-# from turtle import right
 import pygame
 import os
 import threading
 import time
 import numpy as np
 
-DEBUG = True
+DEBUG = False
 
 # Constants for the grid size and image size
 GRID_WIDTH = 7
@@ -15,7 +14,8 @@ IMAGE_HEIGHT = 100
 if DEBUG:
     GAME_MINUTES = 10000
 else:
-    GAME_MINUTES = 1
+    GAME_MINUTES = 3
+
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100, 100))
@@ -445,7 +445,7 @@ def load_images():
     return images
 
 
-def display_screen(end_time, robot, condition):
+def display_screen(end_time, condition=0, robot=None):
     # Clear the screen
     window.fill((255, 255, 255))
 
@@ -470,32 +470,23 @@ def display_screen(end_time, robot, condition):
     window.blit(robot_hand, (2 * IMAGE_WIDTH, 5 * IMAGE_HEIGHT + 50))
 
 
-    if condition == 1:
-        pygame.display.flip()
-        return
+    if condition == 2 or condition == 3:
+        for pos in robot.path[1:]:
+            grid_x, grid_y = pos
+            center_x = grid_x * IMAGE_WIDTH + IMAGE_WIDTH // 2
+            center_y = grid_y * IMAGE_HEIGHT + IMAGE_HEIGHT // 2
+            pygame.draw.circle(window, (255, 0, 0), (center_y, center_x), 5)
 
-    for pos in robot.path[1:]:
-        grid_x, grid_y = pos
-        center_x = grid_x * IMAGE_WIDTH + IMAGE_WIDTH // 2
-        center_y = grid_y * IMAGE_HEIGHT + IMAGE_HEIGHT // 2
-        pygame.draw.circle(window, (255, 0, 0), (center_y, center_x), 5)  # re
-
-        if condition == 2:
-            break
+            if condition == 2:
+                break
 
     # Update the display
     pygame.display.flip()
 
+
 def get_largest_idx(vector):
     return list(vector).index(max(list(vector)))
 
-
-class UserModel:
-    def __init__(self):
-        self.users_real_actions = []
-        self.users_predicted_actions = (
-            []
-        )  # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
 
 # loads all images from the images directory and inserts them into a dictionary
 images = load_images()
@@ -505,15 +496,17 @@ grid_world = Gridworld()
 grid_world.fill_initial_grid(images)
 
 
-def main(condition=1):
+def run_condition(condition=0):
     # creates the person and the robot players
     person = Player("person", 2, 2)
-    robot = Player("robot", 2, 4)
 
-    user_model = UserModel()
+    if condition == 0:
+        robot = None
+    else:
+        robot = Player("robot", 2, 4)
 
     start_time = time.time()
-    end_time = start_time + GAME_MINUTES * 60  # 5 minutes in seconds
+    end_time = start_time + GAME_MINUTES * 60 
     robot_move_timer = time.time() + 0.5
 
     # main loop
@@ -542,11 +535,13 @@ def main(condition=1):
                     user_action = "space"
                     person.space()
 
-        if time.time() >= robot_move_timer:
-            robot_move_timer = time.time() + 0.5
-            robot_move(robot)
 
-        display_screen(end_time, robot, condition)
+        if condition != 0:
+            if time.time() >= robot_move_timer:
+                robot_move_timer = time.time() + 0.5
+                robot_move(robot)
+
+        display_screen(end_time, condition, robot)
 
     # Quit pygame
     pygame.quit()
@@ -742,4 +737,8 @@ def find_move(robot, dir):
         return (robot.pos_x + 1, robot.pos_y)
 
 if __name__ == "__main__":
-    main(3)
+    #print("Enter 1, 2 or 3 for cndition. Enter 0 for tutorial stage")
+    #cond = int(input("SELECT CONDITION: "))
+
+    cond = 3
+    run_condition(cond)
