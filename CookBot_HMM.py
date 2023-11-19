@@ -49,24 +49,24 @@ states = [
 state_targets = {
     #Grab Raw Burger
     "grab_raw_burger": {
-        "empty":["raw_burger_mount","raw_burger"],
-        "raw_burger":["empty_counter"]},
+        "empty":["raw_burger_mount","raw_burger"]},
+        # "raw_burger":["empty_counter"]},
     #Cook Raw Burger
     "cook_raw_burger": {
         "empty":["raw_burger"],
         "raw_burger":["empty_pan"]},
     #Grab Cooked Burger
     "grab_cooked_burger": {
-        "empty":["cooked_burger_pan","cooked_burger"],
-        "cooked_burger":["empty_counter"]},
+        "empty":["cooked_burger_pan","cooked_burger"]},
+        # "cooked_burger":["empty_counter"]},
     #Grab Cheese
     "grab_cheese": {
-        "empty":["cheese_mount","cheese"],
-        "cheese":["empty_counter"]},
+        "empty":["cheese_mount","cheese"]},
+        # "cheese":["empty_counter"]},
     #Grab Bap
     "grab_bap": {
-        "empty":["bap_mount","bap"],
-        "bap":["empty_counter"]},
+        "empty":["bap_mount","bap"]},
+        # "bap":["empty_counter"]},
     #Combine Bap Burger
     "combine_bap_burger": {
         "empty":["cooked_burger","bap"],
@@ -574,15 +574,15 @@ class UserModel:
         piece_map = grid_world.get_piece_map(person.hand)
         can_reach_state_array = np.zeros(10)
         # "grab_raw_burger",
-        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty","raw_burger"])
+        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty"])
         # "cook_raw_burger",
-        can_reach_state_array[state_map['cook_raw_burger']] = ((('empty_pan' in piece_map) and ('raw_burger' in piece_map)) and (person.hand in ["empty","raw_burger"]))
+        can_reach_state_array[state_map['cook_raw_burger']] = ((('empty_pan' in piece_map) and ('raw_burger' in piece_map)) and (person.hand in ["raw_burger"]))
         # "grab_cooked_burger",
-        can_reach_state_array[state_map['grab_cooked_burger']] = ((('cooked_burger_pan' in piece_map) or ("cooked_burger" in piece_map)) and (person.hand in ["empty","cooked_burger"]))
+        can_reach_state_array[state_map['grab_cooked_burger']] = ((('cooked_burger_pan' in piece_map) or ("cooked_burger" in piece_map)) and (person.hand in ["empty"]))
         # "grab_cheese",
-        can_reach_state_array[state_map['grab_cheese']] = (person.hand in ["empty","cheese"])
+        can_reach_state_array[state_map['grab_cheese']] = (person.hand in ["empty"])
         # "grab_bap",
-        can_reach_state_array[state_map['grab_bap']] = (person.hand in ["empty","bap"])
+        can_reach_state_array[state_map['grab_bap']] = (person.hand in ["empty"])
         # "combine_bap_burger",
         can_reach_state_array[state_map['combine_bap_burger']] = ((('cooked_burger' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cooked_burger","bap"]))
         # "combine_bap_cheese",
@@ -596,7 +596,6 @@ class UserModel:
         return can_reach_state_array
 
     def update_transition_probabilities(self, can_reach_state_array):
-        
         #Normalise here and adjust for distance
         n = can_reach_state_array/can_reach_state_array.sum()
         self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
@@ -625,14 +624,21 @@ class UserModel:
         # self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
         can_reach_state = self.generate_can_reach_state_array(person, grid_world)
         
-        print("\n##################")
-        self.update_transition_probabilities(can_reach_state)
-        self.update_emission_probabilites(person, grid_world, can_reach_state)
+        print("###########################ß")
+        #Check if you need to drop the item
+        if (can_reach_state.sum() == 0):
+            paths = grid_world.find_shortest_paths("person", "empty_counter")
+            prob_actions = np.array(self.get_ob_probs_to_piece(person, grid_world, paths))
+            prob_actions.shape = (5,1)
+        else:
+            self.update_transition_probabilities(can_reach_state)
+            self.update_emission_probabilites(person, grid_world, can_reach_state)
 
-        self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
-        print(self.prob_state)
-        prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
-
+            self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
+            print(self.prob_state)
+            prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
+        
+        print(prob_actions)
         for idx, action in enumerate(prob_actions):
             print(str(obs[idx]) + ": " + str(action[0]))
         
