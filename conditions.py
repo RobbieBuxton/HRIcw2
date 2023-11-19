@@ -160,47 +160,41 @@ class Gridworld:
         # print("Print_b")
         # print(b)
         # print("Print_done")
+
         def bfs_to_target(search_space, start):
             if not any("D" in row for row in search_space):
                 return None, None, None
 
-
             labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
-            # Bredth first search
-            # maintain a queue of paths
             queue = []
-            # push the first path into the queue
             labelled_space[start[0]][start[1]] = 0
             queue.append([start])
             target = (-1, -1)
+
             while queue:
-                # get the first path from the queue
                 path = queue.pop(0)
-                # get the last node from the path
                 node = path[-1]
-                # Add surrounding paths to the queue. Assume it's impossible to go out of bounds because floor is never at boundry of map
+
+                # Check surrounding nodes
                 for coord in [
                     (node[0] - 1, node[1]),
                     (node[0], node[1] + 1),
                     (node[0] + 1, node[1]),
                     (node[0], node[1] - 1),
                 ]:
-                    if search_space[coord[0]][coord[1]] == "D":
-                        return labelled_space, coord, node
-                    if search_space[coord[0]][coord[1]] == "O":
-                        if labelled_space[coord[0]][coord[1]] == -1:
-                            labelled_space[coord[0]][coord[1]] = (
-                                labelled_space[node[0]][node[1]] + 1
-                            )
-                        else:
-                            labelled_space[coord[0]][coord[1]] = min(
-                                labelled_space[node[0]][node[1]] + 1,
-                                labelled_space[coord[0]][coord[1]],
-                            )
-                        new_path = list(path)
-                        new_path.append(coord)
-                        queue.append(new_path)
+                    # Check bounds
+                    if 0 <= coord[0] < GRID_HEIGHT and 0 <= coord[1] < GRID_WIDTH:
+                        if search_space[coord[0]][coord[1]] == "D":
+                            return labelled_space, coord, node
+                        if search_space[coord[0]][coord[1]] == "O" and labelled_space[coord[0]][coord[1]] == -1:
+                            labelled_space[coord[0]][coord[1]] = labelled_space[node[0]][node[1]] + 1
+                            new_path = list(path)
+                            new_path.append(coord)
+                            queue.append(new_path)
 
+            # If the queue is empty and target is not found
+            return None, (-1, -1), None
+            
         # Guarentee of no hitting out of bounds
         def get_sub_paths(pos, labelled_space):
             paths = []
