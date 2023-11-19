@@ -1,4 +1,4 @@
-from turtle import right
+# from turtle import right
 import pygame
 import os
 import threading
@@ -57,7 +57,6 @@ class GridBox:
     def update_char(self, character, direction):
         match character:
             case "person":
-                self.image = merge_images(images["floor"], images["person_front"])
                 self.piece = "person"
                 self.movable = False
                 person_image = images["person_front"]
@@ -78,9 +77,20 @@ class GridBox:
                 self.piece = "floor"
                 self.movable = True
             case "robot":
-                self.image = images["robot"]
                 self.piece = "robot"
                 self.movable = False
+                match direction:
+                    case "right":
+                        person_image = pygame.transform.flip(
+                            images["robot_side"].copy(), True, False
+                        )
+                    case "up":
+                        person_image = images["robot_back"]
+                    case "left":
+                        person_image = images["robot_side"]
+                    case "down":
+                        person_image = images["robot_front"]
+                self.image = merge_images(images["floor"], person_image)
 
     def update(self, piece):
         self.piece = piece
