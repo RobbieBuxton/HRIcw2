@@ -622,13 +622,19 @@ class UserModel:
                     return 1
             
 
+    def emissions_scale(self,idx):
+        for i in range(self.ticks_since_state_change):
+            if self.paths_lens_history[i-1][idx] <= self.paths_lens_history[i][idx]:
+                return 0.75
+        return 1
+
     def update_transition_probabilities(self):
         #Normalise here and adjust for distance
         n = np.zeros(10)
         last_paths_lens = self.paths_lens_history[-1]
         for i in range(len(last_paths_lens)):
             if last_paths_lens[i] != -1:
-                n[i] = self.distance_factor(last_paths_lens,i) * self.repeat_penalty(i)
+                n[i] = self.distance_factor(last_paths_lens,i) * self.repeat_penalty(i) * self.emissions_scale(i)
 
         n /= n.sum()
         print(n)
