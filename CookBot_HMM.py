@@ -229,7 +229,6 @@ class Gridworld:
 
     # A and B are pieces that are not the floor
     def find_shortest_paths(self, a, bs):
-       
         def bfs_to_target(search_space, start):
             labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
             # Bredth first search
@@ -311,6 +310,9 @@ class Gridworld:
             return False
         labelled_space, target, pre_target = bfs_to_target(search_space, start)
         sub_paths = get_sub_paths(pre_target, labelled_space)
+        print('output')
+        print([(path + [target]) for path in sub_paths])
+        print('end_output')
         return [(path + [target]) for path in sub_paths]
 
 
