@@ -10,7 +10,7 @@ GRID_WIDTH = 7
 GRID_HEIGHT = 7
 IMAGE_WIDTH = 100
 IMAGE_HEIGHT = 100
-GAME_MINUTES = 0.5
+GAME_MINUTES = 1
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100, 100))
@@ -606,13 +606,29 @@ class UserModel:
         return total/paths_lens[idx]
 
 
+    def repeat_penalty(self,i):
+        if len(self.state_history) == 0:
+            return 1
+        else:
+            print("last: " + str(self.state_history[-1]) + " now: " + str(i))
+            if self.state_history[-1] == i:
+                return 0.25
+            else:
+                if len(self.state_history) == 1:
+                    return 1
+                if self.state_history[-2] == i:
+                    return 0.25
+                else:
+                    return 1
+            
+
     def update_transition_probabilities(self):
         #Normalise here and adjust for distance
         n = np.zeros(10)
         last_paths_lens = self.paths_lens_history[-1]
         for i in range(len(last_paths_lens)):
             if last_paths_lens[i] != -1:
-                n[i] = self.distance_factor(last_paths_lens,i)
+                n[i] = self.distance_factor(last_paths_lens,i) * self.repeat_penalty(i)
 
         n /= n.sum()
         print(n)
@@ -684,9 +700,9 @@ class UserModel:
                 self.ticks_since_state_change = 0
                 self.state_history.append(last_state)
         
-
-        print(self.users_predicted_actions)
-        print(self.users_real_actions)
+                print(self.users_predicted_actions)
+                print(self.users_real_actions)
+                print(self.get_similarity(self.users_predicted_actions,self.users_real_actions))
 
         print(self.ticks_since_state_change)
         can_reach_state = self.generate_can_reach_state_array(person, piece_map)
@@ -720,16 +736,29 @@ class UserModel:
         self.ticks_since_state_change+=1
         return list(prob_actions)
 
-    def print_accuracy_of_predictions(self):
-        predicted = self.users_predicted_actions
-        real = self.users_real_actions
+
+    def get_similarity(self, predicted, real):
         cnt = 0
         same = 0
         for i in range(len(real)):
             if (predicted[i] == real[i]):
                 same += 1
             cnt += 1
-        print(same/cnt)
+        return same/cnt
+
+
+    def print_accuracy_of_predictions(self):
+        predicted = self.users_predicted_actions
+        real = self.users_real_actions
+       
+        f = open("state_prob.txt", "w")
+        f.write(str(real))
+        f.write('\n')
+        f.write(str(predicted[:len(real)]))
+        f.write('\n')
+        f.write(str(self.get_similarity(predicted,real)))
+        f.close()
+
 
 
     def path_to_obs_list(self, path, person):
