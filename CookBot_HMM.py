@@ -5,17 +5,12 @@ import time
 import random
 import numpy as np
 
-DEBUG = True
-
 # Constants for the grid size and image size
 GRID_WIDTH = 7
 GRID_HEIGHT = 7
 IMAGE_WIDTH = 100
 IMAGE_HEIGHT = 100
-if DEBUG:
-    GAME_MINUTES = 10000
-else:
-    GAME_MINUTES = 1
+GAME_MINUTES = 0.25
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100, 100))
@@ -673,6 +668,7 @@ class UserModel:
         return "none" 
 
     def update_user_action_probabilities(self, user_obs, person, robot, grid_world):
+        print("###########################ß")
         piece_map = grid_world.get_piece_map(person.hand)
 
         piece_map_difference = self.get_piece_map_difference(self.old_piece_map,piece_map)
@@ -684,10 +680,14 @@ class UserModel:
                 print(states[last_state])   
                 for i in range(self.ticks_since_state_change):
                     self.users_real_actions.append(last_state)
-                print(self.users_real_actions)
+                
                 self.ticks_since_state_change = 0
                 self.last_state = last_state
         
+
+        print(self.users_predicted_actions)
+        print(self.users_real_actions)
+
         print(self.ticks_since_state_change)
         can_reach_state = self.generate_can_reach_state_array(person, piece_map)
 
@@ -700,17 +700,18 @@ class UserModel:
                 paths_lens[i] = len(paths[i][0]) - 1
         self.paths_lens_history.append(paths_lens)
 
-        print("###########################ß")
         #Check if you need to drop the item
         if (can_reach_state.sum() == 0):
             paths_to_drop = grid_world.find_shortest_paths("person", "empty_counter")
             prob_actions = np.array(self.get_ob_probs_to_piece(person, grid_world, paths_to_drop))
             prob_actions.shape = (5,1)
+            self.users_predicted_actions.append(-1)
         else:
             self.update_transition_probabilities()
             self.update_emission_probabilites(person, grid_world, paths)
 
             self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
+            self.users_predicted_actions.append(np.argmax(self.prob_state))
             prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
         
         for idx, action in enumerate(prob_actions):
@@ -720,11 +721,16 @@ class UserModel:
         return list(prob_actions)
 
     def print_accuracy_of_predictions(self):
-        # TODO: at the end of the three minute run:
-        # print the users actual planned actions.
-        # print the predicted next user's actions
-        # print the percentage of actions predicted correctly.
-        pass
+        predicted = self.users_predicted_actions
+        real = self.users_real_actions
+        cnt = 0
+        same = 0
+        for i in range(len(real)):
+            if (predicted[i] == real[i]):
+                same += 1
+            cnt += 1
+        print(same/cnt)
+
 
     def path_to_obs_list(self, path, person):
         obs = []
@@ -809,7 +815,7 @@ def main():
         display_screen(end_time)
 
     # Quit pygame
-    user_model.print_accuracy_of_predictions
+    user_model.print_accuracy_of_predictions()
     pygame.quit()
 
 
