@@ -5,17 +5,12 @@ import time
 import random
 import numpy as np
 
-DEBUG = True
-
 # Constants for the grid size and image size
 GRID_WIDTH = 7
 GRID_HEIGHT = 7
 IMAGE_WIDTH = 100
 IMAGE_HEIGHT = 100
-if DEBUG:
-    GAME_MINUTES = 10000
-else:
-    GAME_MINUTES = 1
+GAME_MINUTES = 1
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100, 100))
@@ -46,22 +41,54 @@ states = [
     "deliver_cheeseburger",
 ]
 
-state_targets = [
-    "raw_burger_mount",
-    ### Temporary
-    # 'empty_pan',
-    # 'burger_pan',
-    "none",
-    "none",
-    "cheese_mount",
-    "bap_mount",
-    ### Temporary
-    "none",
-    "none",
-    "none",
-    "none",
-    "none",
-]
+state_targets = {
+    #Grab Raw Burger
+    "grab_raw_burger": {
+        "empty":["raw_burger_mount","raw_burger"]},
+        # "raw_burger":["empty_counter"]},
+    #Cook Raw Burger
+    "cook_raw_burger": {
+        "empty":["raw_burger"],
+        "raw_burger":["empty_pan"]},
+    #Grab Cooked Burger
+    "grab_cooked_burger": {
+        "empty":["cooked_burger_pan","cooked_burger"]},
+        # "cooked_burger":["empty_counter"]},
+    #Grab Cheese
+    "grab_cheese": {
+        "empty":["cheese_mount","cheese"]},
+        # "cheese":["empty_counter"]},
+    #Grab Bap
+    "grab_bap": {
+        "empty":["bap_mount","bap"]},
+        # "bap":["empty_counter"]},
+    #Combine Bap Burger
+    "combine_bap_burger": {
+        "empty":["cooked_burger","bap"],
+        "bap":["cooked_burger"],
+        "cooked_burger":["bap"]},
+    #Combine Bap Cheese
+    "combine_bap_cheese": {
+        "empty":["cheese","bap"],
+        "bap":["cheese"],
+        "cheese":["bap"]},
+    #Combine Bap Cheese Burger   
+    "combine_bap_cheese_burger": {
+        "empty":["bap_cheese","bap_burger","cooked_burger","cheese"],
+        "bap_burger":["cheese"],
+        "cheese":["bap_burger"],
+        "bap_cheese":["cooked_burger"],
+        "cooked_burger":["bap_cheese"]},
+    #Combine Bap Cheese Burger Bap
+    "combine_bap_cheese_burger_bap": {
+        "empty":["bap","bap_burger_cheese"],
+        "bap":["bap_burger_cheese"],
+        "bap_burger_cheese":["bap"]},
+    #Deliver Cheeseburger
+    "deliver_cheeseburger": {
+        "empty":["bap_burger_cheese_bap"],
+        "bap_burger_cheese_bap":["exit_counter"]}
+}
 
 state_map = {}
 for idx, state in enumerate(states):
@@ -185,8 +212,11 @@ class Gridworld:
             self.gw[6][2].image = images[piece]
 
 
-    def get_piece_map(self):
-        piece_map = {}
+    def get_piece_map(self, hand):
+        piece_map={}
+        if hand != "empty":
+            piece_map[hand] = 1
+        
         for x in range(GRID_WIDTH):
             for y in range(GRID_HEIGHT):
                 piece = self.gw[x][y].piece
@@ -198,12 +228,7 @@ class Gridworld:
         return piece_map
 
     # A and B are pieces that are not the floor
-    def find_shortest_paths(self, a, b):
-        print("Print_a")
-        print(a)
-        print("Print_b")
-        print(b)
-        print("Print_done")
+    def find_shortest_paths(self, a, bs):
         def bfs_to_target(search_space, start):
             labelled_space = [[-1 for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
             # Bredth first search
@@ -269,6 +294,7 @@ class Gridworld:
         # Initialise problem
         search_space = [["#" for _ in range(GRID_WIDTH)] for _ in range(GRID_HEIGHT)]
         start = (-1, -1)
+        found_d = False
         for i in range(GRID_HEIGHT):
             for j in range(GRID_WIDTH):
                 if self.gw[i][j].piece == "floor":
@@ -276,9 +302,12 @@ class Gridworld:
                 if self.gw[i][j].piece == a:
                     search_space[i][j] = "S"
                     start = (i, j)
-                if self.gw[i][j].piece == b:
+                if self.gw[i][j].piece in bs:
                     search_space[i][j] = "D"
-
+                    found_d = True
+                    
+        if not found_d:
+            return False
         labelled_space, target, pre_target = bfs_to_target(search_space, start)
         sub_paths = get_sub_paths(pre_target, labelled_space)
         print('output')
@@ -440,6 +469,10 @@ class Player:
                 self.hand = "empty"
                 grid_loc.update("bap_burger")
                 grid_world.update_hand("empty_counter", self.char)
+            if self.hand == "bap_cheese":
+                self.hand = "empty"
+                grid_loc.update("bap_burger_cheese")
+                grid_world.update_hand("empty_counter", self.char)
 
         if grid_loc.piece == "bap_burger":
             if self.hand == "cheese":
@@ -525,61 +558,100 @@ def get_largest_idx(vector):
 
 class UserModel:
     def __init__(self):
+        self.paths_lens_history = []
+        self.old_piece_map = grid_world.get_piece_map("empty")
+        self.state_history = []
+        self.ticks_since_state_change = 0
+
+        for i in range(5):
+            self.paths_lens_history.append([-1]*10)
+
         self.users_real_actions = []
         self.users_predicted_actions = (
             []
         )  # you want to be careful that the predicted_actions and the real_actions match up in size, as you will get more observations than you will get real actions.
 
-        self._init_prob_state = np.zeros((10, 1))
-        self._init_prob_state[state_map["grab_raw_burger"]] = 0.333
-        self._init_prob_state[state_map["grab_cheese"]] = 0.333
-        self._init_prob_state[state_map["grab_bap"]] = 0.333
-
-        self.prob_state = self._init_prob_state
+        self.prob_state = np.ones((10, 1))/10.0
 
         # TODO: create other needed variables
 
-    def update_transition_probabilities(self, person, grid_world):
-        self.transition_probabilities = np.zeros((10,10))
-        print(grid_world.get_piece_map())
-        if person.hand == "raw_burger":
-                idx = state_map["cook_raw_burger"]
-                self.transition_probabilities[idx,idx] = 1
-        
-        elif person.hand == "bap_burger_cheese_bap":
-                idx = state_map["deliver_cheeseburger"]
-                self.transition_probabilities[idx,idx] = 1
+    def generate_can_reach_state_array(self, person, piece_map):
+        can_reach_state_array = np.zeros(10)
+        # "grab_raw_burger",
+        can_reach_state_array[state_map['grab_raw_burger']] = (person.hand in ["empty"])
+        # "cook_raw_burger",
+        can_reach_state_array[state_map['cook_raw_burger']] = ((('empty_pan' in piece_map) and ('raw_burger' in piece_map)) and (person.hand in ["raw_burger"]))
+        # "grab_cooked_burger",
+        can_reach_state_array[state_map['grab_cooked_burger']] = ((('cooked_burger_pan' in piece_map) or ("cooked_burger" in piece_map)) and (person.hand in ["empty"]))
+        # "grab_cheese",
+        can_reach_state_array[state_map['grab_cheese']] = (person.hand in ["empty"])
+        # "grab_bap",
+        can_reach_state_array[state_map['grab_bap']] = (person.hand in ["empty"])
+        # "combine_bap_burger",
+        can_reach_state_array[state_map['combine_bap_burger']] = ((('cooked_burger' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cooked_burger","bap"]))
+        # "combine_bap_cheese",
+        can_reach_state_array[state_map['combine_bap_cheese']] = ((('cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","cheese","bap"]))
+        # "combine_bap_cheese_burger",
+        can_reach_state_array[state_map['combine_bap_cheese_burger']] = (((('bap_burger' in piece_map) and ('cheese' in piece_map)) or (('cooked_burger' in piece_map) and ('bap_cheese' in piece_map))) and (person.hand in ["empty","cheese","cooked_burger","bap_burger",'bap_cheese']))
+        # "combine_bap_cheese_burger_bap",
+        can_reach_state_array[state_map['combine_bap_cheese_burger_bap']] = ((('bap_burger_cheese' in piece_map) and ('bap' in piece_map)) and (person.hand in ["empty","bap",'bap_burger_cheese']))
+        # "deliver_cheeseburger",
+        can_reach_state_array[state_map['deliver_cheeseburger']] = ("bap_burger_cheese_bap" in piece_map) and (person.hand in ["empty",'bap_burger_cheese_bap'])
+        return can_reach_state_array
+
+    #Scale by how far away we are from the emission target
+    def distance_factor(self, paths_lens, idx):
+        total = 0
+        for i in range(len(paths_lens)):
+            if paths_lens[i] != -1:
+                total += paths_lens[i]
+        return total/paths_lens[idx]
+
+
+    def repeat_penalty(self,i):
+        if len(self.state_history) == 0:
+            return 1
         else:
-            self.transition_probabilities = np.matrix(
-                [
-                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                ],
-                np.float32,
-            )
+            print("last: " + str(self.state_history[-1]) + " now: " + str(i))
+            if self.state_history[-1] == i:
+                return 0.25
+            else:
+                if len(self.state_history) == 1:
+                    return 1
+                if self.state_history[-2] == i:
+                    return 0.25
+                else:
+                    return 1
+            
 
-    def update_emission_probabilites(self, person, grid_world):
+    def emissions_scale(self,idx):
+        for i in range(self.ticks_since_state_change):
+            if self.paths_lens_history[i-1][idx] <= self.paths_lens_history[i][idx]:
+                return 0.75
+        return 1
+
+    def update_transition_probabilities(self):
+        #Normalise here and adjust for distance
+        n = np.zeros(10)
+        last_paths_lens = self.paths_lens_history[-1]
+        for i in range(len(last_paths_lens)):
+            if last_paths_lens[i] != -1:
+                n[i] = self.distance_factor(last_paths_lens,i) * self.repeat_penalty(i) * self.emissions_scale(i)
+
+        n /= n.sum()
+        print(n)
+        self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
+
+
+    def update_emission_probabilites(self, person, grid_world, paths):
         self.emission_probabilities = np.zeros((5, 10))
-        for i in range(10):
-            state = states[i]
-            if state_targets[i] == "none":
-                continue
-            probs = self.get_ob_probs_to_piece(person, grid_world, state)
-            for k in range(5):
-                self.emission_probabilities[k, i] = probs[k]
-
-    def get_ob_probs_to_piece(self, person, grid_world, state):
-        paths = grid_world.find_shortest_paths(
-            "person", state_targets[state_map[state]]
-        )
+        for i in range(len(paths)):
+            if paths[i] != None:
+                probs = self.get_ob_probs_to_piece(person, grid_world, paths[i])
+                for k in range(5):
+                    self.emission_probabilities[k, i] = probs[k]
+     
+    def get_ob_probs_to_piece(self, person, grid_world, paths):
         obs_lists = [self.path_to_obs_list(path, person) for path in paths]
         obs_head_lists = set([ob_list[0] for ob_list in obs_lists])
         probs = np.zeros((5))
@@ -587,33 +659,115 @@ class UserModel:
             probs[ob] = 1.0 / len(obs_head_lists)
         return probs
 
+    def get_piece_map_difference(self,old_piece_map,new_piece_map):
+        a = set(new_piece_map.items())
+        b = set(old_piece_map.items())
+        return [[val[0] for val in b-a], [val[0] for val in a-b]]
+
+
+    def determine_last_state(self,piece_map_difference):
+        before = piece_map_difference[0]
+        after = piece_map_difference[1]
+        print(str(before) + ":" + str(after))
+        if "raw_burger" in after:
+            return state_map["grab_raw_burger"]
+        if 'raw_burger' in before and 'burger_pan' in after:
+            return state_map["cook_raw_burger"]
+        if ('cooked_burger_pan' in before or 'burger_pan' in before) and 'cooked_burger' in after:
+            return state_map["grab_cooked_burger"]
+        if 'cheese' in after:
+            return state_map["grab_cheese"]
+        if 'bap' in after:
+            return state_map["grab_bap"]
+        if 'bap' in before and 'cooked_burger' in before and 'bap_burger' in after:
+            return state_map["combine_bap_burger"]
+        if 'bap' in before and 'cheese' in before and 'bap_cheese' in after:
+            return state_map["combine_bap_cheese"]
+        if (('cheese' in before and 'bap_burger' in before) or ('cooked_burger' in before and 'bap_cheese' in before)) and "bap_burger_cheese" in after: 
+            return state_map["combine_bap_cheese_burger"]
+        if 'bap' in before and 'bap_burger_cheese' in before and 'bap_burger_cheese_bap' in after:
+            return state_map['combine_bap_cheese_burger_bap']
+        if 'bap_burger_cheese_bap' in before:
+            return state_map['deliver_cheeseburger']
+        return "none" 
+
     def update_user_action_probabilities(self, user_obs, person, robot, grid_world):
-        # TODO: after each user action (up, down, left, right, space) update the probability of the user being in each state.
-        # self.prob_state = np.multiply(self.emission_probabilities,np.multiply(self.transition_probabilities,self.prob_state))
-        print("\n##################")
-        print(person.hand)
-        self.update_transition_probabilities(person, grid_world)
-        print(self.transition_probabilities)
-        self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
+        print("###########################ß")
+        piece_map = grid_world.get_piece_map(person.hand)
 
-        self.update_emission_probabilites(person, grid_world)
+        piece_map_difference = self.get_piece_map_difference(self.old_piece_map,piece_map)
+        self.old_piece_map = piece_map
 
-        prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
-
-        for idx, action in enumerate(prob_actions):
-            print(str(obs[idx]) + ": " + str(action))
+        if len(piece_map_difference) > 0:
+            last_state = self.determine_last_state(piece_map_difference)
+            if last_state != "none":
+                print(states[last_state])   
+                for i in range(self.ticks_since_state_change):
+                    self.users_real_actions.append(last_state)
+                
+                self.ticks_since_state_change = 0
+                self.state_history.append(last_state)
         
+                print(self.users_predicted_actions)
+                print(self.users_real_actions)
+                print(self.get_similarity(self.users_predicted_actions,self.users_real_actions))
 
+        print(self.ticks_since_state_change)
+        can_reach_state = self.generate_can_reach_state_array(person, piece_map)
+
+        paths = [None]*len(can_reach_state)
+        paths_lens = [-1]*len(can_reach_state)
+        for i in range(len(can_reach_state)):
+            if can_reach_state[i]:
+                paths[i] = grid_world.find_shortest_paths("person", state_targets[states[i]][person.hand])
+                #Currently doesn't account for facing the same direction
+                paths_lens[i] = len(paths[i][0]) - 1
+        self.paths_lens_history.append(paths_lens)
+
+        #Check if you need to drop the item
+        if (can_reach_state.sum() == 0):
+            paths_to_drop = grid_world.find_shortest_paths("person", "empty_counter")
+            prob_actions = np.array(self.get_ob_probs_to_piece(person, grid_world, paths_to_drop))
+            prob_actions.shape = (5,1)
+            self.users_predicted_actions.append(-1)
+        else:
+            self.update_transition_probabilities()
+            self.update_emission_probabilites(person, grid_world, paths)
+
+            self.prob_state = np.matmul(self.transition_probabilities, self.prob_state)
+            self.users_predicted_actions.append(np.argmax(self.prob_state))
+            prob_actions = np.matmul(self.emission_probabilities, self.prob_state)
+        
+        for idx, action in enumerate(prob_actions):
+            print(str(obs[idx]) + ": " + "{:.3f}".format(action[0]))
+        
+        self.ticks_since_state_change+=1
         return list(prob_actions)
 
-    def print_accuracy_of_predictions(self):
-        # TODO: at the end of the three minute run:
-        # print the users actual planned actions.
-        # print the predicted next user's actions
-        # print the percentage of actions predicted correctly.
-        pass
 
-        # This can probably be merged into BFS but currently useful to be seperate for debugging
+    def get_similarity(self, predicted, real):
+        cnt = 0
+        same = 0
+        for i in range(len(real)):
+            if (predicted[i] == real[i]):
+                same += 1
+            cnt += 1
+        return same/cnt
+
+
+    def print_accuracy_of_predictions(self):
+        predicted = self.users_predicted_actions
+        real = self.users_real_actions
+       
+        f = open("state_prob.txt", "w")
+        f.write(str(real))
+        f.write('\n')
+        f.write(str(predicted[:len(real)]))
+        f.write('\n')
+        f.write(str(self.get_similarity(predicted,real)))
+        f.close()
+
+
 
     def path_to_obs_list(self, path, person):
         obs = []
@@ -698,7 +852,7 @@ def main():
         display_screen(end_time)
 
     # Quit pygame
-    user_model.print_accuracy_of_predictions
+    user_model.print_accuracy_of_predictions()
     pygame.quit()
 
 
