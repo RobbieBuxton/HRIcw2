@@ -14,8 +14,8 @@
       name = "CookRobotENV";
 
       packages = with nixpkgs.legacyPackages.${system}; [ 
-        python311Packages.pygame
-        python311Packages.numpy
+        python310Packages.pygame
+        python310Packages.numpy
       ];
 
       shellHook = ''

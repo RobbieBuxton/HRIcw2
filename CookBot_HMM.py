@@ -310,9 +310,6 @@ class Gridworld:
             return False
         labelled_space, target, pre_target = bfs_to_target(search_space, start)
         sub_paths = get_sub_paths(pre_target, labelled_space)
-        print('output')
-        print([(path + [target]) for path in sub_paths])
-        print('end_output')
         return [(path + [target]) for path in sub_paths]
 
 
@@ -415,7 +412,6 @@ class Player:
             grid_world.update_hand("cooked_burger", self.char)
 
     def drop(self):
-        # print(self.direction)
         if self.direction == "right":
             grid_loc = grid_world.gw[self.pos_x][self.pos_y + 1]
         if self.direction == "left":
@@ -612,7 +608,6 @@ class UserModel:
         if len(self.state_history) == 0:
             return 1
         else:
-            print("last: " + str(self.state_history[-1]) + " now: " + str(i))
             if self.state_history[-1] == i:
                 return 0.25
             else:
@@ -639,7 +634,6 @@ class UserModel:
                 n[i] = self.distance_factor(last_paths_lens,i) * self.repeat_penalty(i) * self.emissions_scale(i)
 
         n /= n.sum()
-        print(n)
         self.transition_probabilities = (np.column_stack((n,n,n,n,n,n,n,n,n,n)))
 
 
@@ -668,7 +662,6 @@ class UserModel:
     def determine_last_state(self,piece_map_difference):
         before = piece_map_difference[0]
         after = piece_map_difference[1]
-        print(str(before) + ":" + str(after))
         if "raw_burger" in after:
             return state_map["grab_raw_burger"]
         if 'raw_burger' in before and 'burger_pan' in after:
@@ -701,18 +694,12 @@ class UserModel:
         if len(piece_map_difference) > 0:
             last_state = self.determine_last_state(piece_map_difference)
             if last_state != "none":
-                print(states[last_state])   
                 for i in range(self.ticks_since_state_change):
                     self.users_real_actions.append(last_state)
                 
                 self.ticks_since_state_change = 0
                 self.state_history.append(last_state)
-        
-                print(self.users_predicted_actions)
-                print(self.users_real_actions)
-                print(self.get_similarity(self.users_predicted_actions,self.users_real_actions))
 
-        print(self.ticks_since_state_change)
         can_reach_state = self.generate_can_reach_state_array(person, piece_map)
 
         paths = [None]*len(can_reach_state)
@@ -759,12 +746,20 @@ class UserModel:
         predicted = self.users_predicted_actions
         real = self.users_real_actions
        
+        if (len(real) != 0): 
+            similarity = self.get_similarity(predicted,real)
+        else:
+            similarity = 1
+
+        print(str(real))
+        print(str(predicted[:len(real)]))
+        print(str(similarity))
         f = open("state_prob.txt", "w")
         f.write(str(real))
         f.write('\n')
         f.write(str(predicted[:len(real)]))
         f.write('\n')
-        f.write(str(self.get_similarity(predicted,real)))
+        f.write(str(similarity))
         f.close()
 
 
@@ -826,7 +821,6 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                # print (event.key)
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_UP:
