@@ -10,7 +10,7 @@ GRID_WIDTH = 7
 GRID_HEIGHT = 7
 IMAGE_WIDTH = 100
 IMAGE_HEIGHT = 100
-GAME_MINUTES = 0.25
+GAME_MINUTES = 0.5
 black = (0, 0, 0)
 white = (255, 255, 255)
 black_image = pygame.Surface((100, 100))
@@ -558,7 +558,7 @@ class UserModel:
     def __init__(self):
         self.paths_lens_history = []
         self.old_piece_map = grid_world.get_piece_map("empty")
-        self.last_state = -1
+        self.state_history = []
         self.ticks_since_state_change = 0
 
         for i in range(5):
@@ -663,7 +663,7 @@ class UserModel:
             return state_map["combine_bap_cheese_burger"]
         if 'bap' in before and 'bap_burger_cheese' in before and 'bap_burger_cheese_bap' in after:
             return state_map['combine_bap_cheese_burger_bap']
-        if 'bap_cheese_burger_bap' in before:
+        if 'bap_burger_cheese_bap' in before:
             return state_map['deliver_cheeseburger']
         return "none" 
 
@@ -682,7 +682,7 @@ class UserModel:
                     self.users_real_actions.append(last_state)
                 
                 self.ticks_since_state_change = 0
-                self.last_state = last_state
+                self.state_history.append(last_state)
         
 
         print(self.users_predicted_actions)
