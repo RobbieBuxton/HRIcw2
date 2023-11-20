@@ -1,3 +1,9 @@
+#==============================================================
+# Cookbot_Coop.py completed by Alfie Chenery, ac320, 01862873
+#==============================================================
+
+
+
 import pygame
 import os
 import threading
@@ -391,10 +397,14 @@ def print_state(robot):
 	print("")
 
 
-def robot_determine_state(robot):
+def robot_determine_state(robot, dump_state=False):
 	"""
 	based on the grid_world and robot hand determine the robot's desired high level action
-	returns 4-tuple (state, start_pos, end_pos, desired_hand) - start_pos and end_pos may be None
+	input: Robot object
+		   set dump_state if robot failed to do its action and needs to dump its
+		   hands in any free space.
+		   leave unset (default) to determine fresh state from idle
+	output: 4-tuple (state, start_pos, end_pos, desired_hand) - start_pos and end_pos may be None
 			go to start_pos, pick up desired_hand, go to end_pos, put down
 	"""
 	table = [grid_world.gw[3][3].piece, grid_world.gw[2][3].piece, grid_world.gw[1][3].piece]
@@ -403,10 +413,9 @@ def robot_determine_state(robot):
 
 	pans = [ p[:p.rfind('_')] for p in [grid_world.gw[3][6].piece, grid_world.gw[2][6].piece]]
 	pan_coords = [(3,5,"right"), (2,5,"right")]
-	 # for convenience we strip the ending "_pan" so that a cooked_burger in the pan or the hand both appear as cooked_burger
-	 # so that looking for "cooked_burger" in hand or "cooked_burger_pan" in pans is the same as "cooked_burger" in pans + hand
+	 # for convenience we strip the ending "_pan" so that a cooked_burger in the pan or in storage both appear as cooked_burger
+	 # so that looking for "cooked_burger" in storage or "cooked_burger_pan" in pans is the same as "cooked_burger" in (storage + pans)
 
-	hand = [robot.hand]
 	# lists are defined in this order to give precedance to the table and pan closest to the burger mount,
 	#  since it is preferable for the robot to stay close to this side 
 
@@ -417,8 +426,16 @@ def robot_determine_state(robot):
 	print("")
 	print(table)
 	print(pans)
-	print(hand)
+	print(robot.hand)
 	print("")
+
+	if dump_state: #we failed an action and now have our hands full. Find somewhere to put it
+		if (e := find_item("empty_counter", storage + table)) != -1:
+			return("dump", None, (storage_coords + table_coords)[e], "empty")
+
+		else:
+			return ("idle",None,None,None)
+
 
 	# if we have previously dumped a bap into storage, take that one first, to clear storage
 	if (s := find_item("bap", storage)) != -1:
@@ -433,11 +450,11 @@ def robot_determine_state(robot):
 	if (t := find_item("bap_burger_cheese", table)) != -1:
 		return ("place_bap", bap_coords, table_coords[t], "bap")
 	
-	elif ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
-		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
+	elif ((t := find_item("bap_cheese", table)) != -1) and ((p := find_item("cooked_burger", storage + pans)) != -1):
+		return ("place_burger", (storage_coords + pan_coords)[p], table_coords[t], "cooked_burger")
 	
-	elif ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", pans + hand)) != -1):
-		return ("place_burger",pan_coords[p], table_coords[t], "cooked_burger")
+	elif ((t := find_item("bap", table)) != -1) and ((p := find_item("cooked_burger", storage + pans)) != -1):
+		return ("place_burger", (storage_coords + pan_coords)[p], table_coords[t], "cooked_burger")
 	
 	elif (t := find_item("cooked_burger", table)) != -1:
 		return ("place_bap", bap_coords, table_coords[t], "bap")
@@ -448,7 +465,7 @@ def robot_determine_state(robot):
 	elif (p := both_pans_done(pans) != -1) and (t := find_item("empty_counter", table)) != -1:
 		return ("place_burger", pan_coords[p], table_coords[t], "cooked_burger")
 	
-	elif ((t := find_item("raw_burger", table + hand)) != -1) and ((p := find_item("empty", pans)) != -1):
+	elif ((t := find_item("raw_burger", table)) != -1) and ((p := find_item("empty", pans)) != -1):
 		return ("cook_burger", table_coords[t], pan_coords[p], "raw_burger")
 	
 	elif (t := two_table_spaces(table)) != -1:
@@ -493,9 +510,6 @@ def robot_move_to(robot, pos, press_space=True):
 	# if we want to be facing horizontal then our last movement should be a horizontal one, else vertical
 	#  recall x is actually vertical position so pathx is vertical movements
 
-	print(f"path: {path}")
-	print("")
-
 	if not path: #if list is empty
 		if robot.direction != dir: #correct space, wrong direction. This can only happen if we didnt need to move to complete this action
 			path = [dir]
@@ -503,6 +517,8 @@ def robot_move_to(robot, pos, press_space=True):
 			if press_space:
 				robot.space()
 			return True
+
+	print(f"path: {path}\n")
 
 	robot.move(path[0])
 	return False
@@ -522,14 +538,32 @@ def robot_move(robot):
 	
 	elif robot.state in ["place_bap", "place_burger", "cook_burger"]:
 		if robot.hand == "empty":
-			robot_move_to(robot, robot.source_pos, True)
+			done = robot_move_to(robot, robot.source_pos, True)
+			if done and robot.hand == "empty": #failed to pick it up because player stole it
+				robot.state = "idle"
+				
 		elif robot.hand == robot.desired_hand:
 			done = robot_move_to(robot, robot.target_pos, True)
 			if done: #got to target pos and pressed space
 				robot.state = "idle"
+				if robot.hand != "empty":
+					robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+		
 		else:
+			#should no longer ever happen, test then remove else case
 			print("Uh oh hands full")
 			print(f"state: {robot.state}, source:{robot.source_pos} target:{robot.target_pos}")
+			robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+	
+	elif robot.state == "dump":
+		if robot.hand != "empty":
+			done = robot_move_to(robot, robot.target_pos, True)
+			if done and robot.hand != "empty":
+				#we failed to place again, find a new empty space
+				robot.state, robot.source_pos, robot.target_pos, robot.desired_hand = robot_determine_state(robot, dump_state=True)
+		else:
+			#hands are finally free, go idle and get new job
+			robot.state = "idle"
 
 	else:
 		raise Exception(f"UNKNOWN STATE: {robot.state}")
