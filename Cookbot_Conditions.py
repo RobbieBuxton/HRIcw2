@@ -545,6 +545,7 @@ def run_condition(condition=0):
 
     # Quit pygame
     pygame.quit()
+    return Player.score
     
 def find_item(item, arr):
 	# returns the index of the first occurance of item in arr, -1 if not found
@@ -737,8 +738,13 @@ def find_move(robot, dir):
         return (robot.pos_x + 1, robot.pos_y)
 
 if __name__ == "__main__":
-    #print("Enter 1, 2 or 3 for cndition. Enter 0 for tutorial stage")
-    #cond = int(input("SELECT CONDITION: "))
 
-    cond = 3
-    run_condition(cond)
+    print("Enter 1, 2 or 3 for condition. Enter 0 for tutorial stage")
+    cond = int(input("SELECT CONDITION: "))
+
+    if cond < 0 or cond > 3:
+        print("Please enter a valid condition")
+        exit()
+
+    score = run_condition(cond)
+    print(f"\nFinal score: {score}")
